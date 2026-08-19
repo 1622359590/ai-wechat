@@ -1,0 +1,17 @@
+.git
+.github
+.cursor
+.DS_Store
+docs
+deploy
+**/*_test.go
+proto/compat
+proto/testdata
+*.md
+*.log
+*.sql
+*.dump
+*.pcap
+*.bin
+.env
+.env.*

@@ -1,4 +1,4 @@
-module github.com/1622359590/ai-wechat/proto/compat
+module github.com/1622359590/ai-wechat
 
 go 1.24
 
