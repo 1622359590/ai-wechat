@@ -51,6 +51,75 @@ function newInnerMessage(string $messageType): object
     };
 }
 
+function expectedGetters(string $messageType): array
+{
+    return match ($messageType) {
+        'TransportMessage' => [
+            'Id' => 'getId',
+            'AccessToken' => 'getAccessToken',
+            'MsgType' => 'getMsgType',
+            'Content' => 'getContent',
+            'RefMessageId' => 'getRefMessageId',
+        ],
+        'DeviceAuthReqMessage' => [
+            'AuthType' => 'getAuthType',
+            'Credential' => 'getCredential',
+        ],
+        'HeartBeatMessage' => [
+            'Imei' => 'getImei',
+            'WeChatId' => 'getWeChatId',
+        ],
+        'FriendTalkNoticeMessage' => [
+            'WeChatId' => 'getWeChatId',
+            'FriendId' => 'getFriendId',
+            'ContentType' => 'getContentType',
+            'Content' => 'getContent',
+            'MsgId' => 'getMsgId',
+            'MsgSvrId' => 'getMsgSvrId',
+            'Ext' => 'getExt',
+            'CreateTime' => 'getCreateTime',
+            'NickName' => 'getNickName',
+        ],
+        'TalkToFriendTaskMessage' => [
+            'WeChatId' => 'getWeChatId',
+            'FriendId' => 'getFriendId',
+            'ContentType' => 'getContentType',
+            'Content' => 'getContent',
+            'Remark' => 'getRemark',
+            'MsgId' => 'getMsgId',
+            'Immediate' => 'getImmediate',
+        ],
+        default => throw new RuntimeException('fixture message_type is not approved'),
+    };
+}
+
+function normalizeSemanticValue(mixed $value): string
+{
+    return match (true) {
+        $value === null => 'absent',
+        is_bool($value) => $value ? 'true' : 'false',
+        is_int($value), is_float($value), is_string($value) => (string) $value,
+        default => 'present',
+    };
+}
+
+function verifyExpectedFields(object $message, string $messageType, array $expected): void
+{
+    $getters = expectedGetters($messageType);
+    $expectedKeys = array_keys($expected);
+    $getterKeys = array_keys($getters);
+    sort($expectedKeys);
+    sort($getterKeys);
+    if ($expectedKeys !== $getterKeys) {
+        throw new RuntimeException('normal fixture semantic field coverage is incomplete');
+    }
+    foreach ($getters as $field => $getter) {
+        if (normalizeSemanticValue($message->{$getter}()) !== (string) $expected[$field]) {
+            throw new RuntimeException('legacy PHP decoded an unexpected semantic field');
+        }
+    }
+}
+
 function verifyFixture(array $fixture): void
 {
     foreach (['case', 'message_type', 'msg_type', 'frame_hex', 'unknown_scope'] as $key) {
@@ -72,6 +141,9 @@ function verifyFixture(array $fixture): void
     $messageType = (string) $fixture['message_type'];
     $unknownScope = (string) $fixture['unknown_scope'];
     if ($messageType === 'TransportMessage') {
+        if (str_ends_with((string) $fixture['case'], '-normal')) {
+            verifyExpectedFields($outer, $messageType, (array) ($fixture['expected'] ?? []));
+        }
         if ($unknownScope === 'outer' && !str_ends_with($body, UNKNOWN_FIELD_127)) {
             throw new RuntimeException('transport fixture is missing unknown field 127');
         }
@@ -94,6 +166,9 @@ function verifyFixture(array $fixture): void
     }
     if ($unknownScope === 'inner' && !str_ends_with($innerBody, UNKNOWN_FIELD_127)) {
         throw new RuntimeException('inner fixture is missing unknown field 127');
+    }
+    if (str_ends_with((string) $fixture['case'], '-normal')) {
+        verifyExpectedFields($inner, $messageType, (array) ($fixture['expected'] ?? []));
     }
 }
 

@@ -142,22 +142,22 @@
 - Consumes: exact test output and the committed schema/fixtures.
 - Produces: the TASK-0004 protocol handoff and a complete public audit trail.
 
-- [ ] **Step 1: Record only verified protocol facts**
+- [x] **Step 1: Record only verified protocol facts**
 
   Add exact field tables, enum values, fixture count, Any type URL convention, unknown-field result, and limitations to `docs/protocol.md` and this task document.
 
-- [ ] **Step 2: Update project state and changelog**
+- [x] **Step 2: Update project state and changelog**
 
   Mark TASK-0003 complete only after all Go tests and the PHP integration pass; set TASK-0004 as the next active candidate.
 
-- [ ] **Step 3: Run the complete verification gate**
+- [x] **Step 3: Run the complete verification gate**
 
   Run Go tests once without the environment variable to prove portable skip behavior and once with `LEGACY_SOURCE_ROOT` to prove 15-fixture PHP compatibility. Then check `git diff --check`, Markdown formatting/links, approved staged paths, staged-index credential patterns, forbidden file classes, and scan fixture JSON for non-synthetic identifiers.
 
-- [ ] **Step 4: Request independent review and fix findings**
+- [x] **Step 4: Request independent review and fix findings**
 
   Require zero unresolved Critical or Important findings for schema accuracy, fixture safety, TDD evidence and PHP/Go compatibility.
 
-- [ ] **Step 5: Commit, push, open a ready PR, merge and sync main**
+- [x] **Step 5: Commit, push, open a ready PR, merge and sync main**
 
   Use the standing GitHub authorization after fresh verification; do not deploy or change production state.

@@ -26,11 +26,12 @@ var updateFixtures = flag.Bool("update", false, "update synthetic compatibility 
 const fixturePath = "../testdata/synthetic_frames.json"
 
 type syntheticFixture struct {
-	Case         string `json:"case"`
-	MessageType  string `json:"message_type"`
-	MsgType      int32  `json:"msg_type"`
-	FrameHex     string `json:"frame_hex"`
-	UnknownScope string `json:"unknown_scope"`
+	Case         string            `json:"case"`
+	MessageType  string            `json:"message_type"`
+	MsgType      int32             `json:"msg_type"`
+	FrameHex     string            `json:"frame_hex"`
+	UnknownScope string            `json:"unknown_scope"`
+	Expected     map[string]string `json:"expected,omitempty"`
 }
 
 type fixtureSpec struct {
@@ -38,6 +39,7 @@ type fixtureSpec struct {
 	messageType  string
 	msgType      int32
 	unknownScope string
+	expected     map[string]string
 	setFields    func(protoreflect.Message)
 }
 
@@ -91,6 +93,50 @@ func TestFrameLengthPrefix(t *testing.T) {
 			msgType := message.Get(transport.Fields().ByName("MsgType")).Enum()
 			if got, want := int32(msgType), fixture.MsgType; got != want {
 				t.Fatalf("MsgType = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+func TestAllFixturesRoundTrip(t *testing.T) {
+	files := compileRecovered(t)
+	transport := requireMessage(t, files, "TransportMessage")
+	fixtures := readFixtures(t)
+
+	for _, fixture := range fixtures {
+		t.Run(fixture.Case, func(t *testing.T) {
+			frame := decodeFrameHex(t, fixture.FrameHex)
+			body := frame[4:]
+			outer := dynamicpb.NewMessage(transport)
+			if err := proto.Unmarshal(body, outer); err != nil {
+				t.Fatalf("decode transport body: %v", err)
+			}
+			if got := marshalDeterministic(t, outer); !bytes.Equal(got, body) {
+				t.Fatal("transport body changed during decode and deterministic encode")
+			}
+
+			if fixture.MessageType == "TransportMessage" {
+				return
+			}
+			packed := new(anypb.Any)
+			content := outer.Get(transport.Fields().ByName("Content")).Message().Interface()
+			contentBody, err := proto.Marshal(content)
+			if err != nil {
+				t.Fatalf("marshal Any: %v", err)
+			}
+			if err := proto.Unmarshal(contentBody, packed); err != nil {
+				t.Fatalf("decode Any: %v", err)
+			}
+			wantTypeURL := "type.googleapis.com/" + protoPackage + "." + fixture.MessageType
+			if packed.TypeUrl != wantTypeURL {
+				t.Fatalf("Any type URL = %q, want %q", packed.TypeUrl, wantTypeURL)
+			}
+			inner := dynamicpb.NewMessage(requireMessage(t, files, fixture.MessageType))
+			if err := proto.Unmarshal(packed.Value, inner); err != nil {
+				t.Fatalf("decode inner body: %v", err)
+			}
+			if got := marshalDeterministic(t, inner); !bytes.Equal(got, packed.Value) {
+				t.Fatal("inner body changed during decode and deterministic encode")
 			}
 		})
 	}
@@ -155,14 +201,7 @@ func TestLegacyPHPCompatibility(t *testing.T) {
 	if legacyRoot == "" {
 		t.Skip("LEGACY_SOURCE_ROOT is not set; external legacy PHP compatibility was not run")
 	}
-	php, err := exec.LookPath("php")
-	if err != nil {
-		t.Fatalf("find PHP CLI: %v", err)
-	}
-
-	command := exec.Command(php, "verify_legacy_php.php", fixturePath)
-	command.Env = append(os.Environ(), "LEGACY_SOURCE_ROOT="+legacyRoot)
-	output, err := command.CombinedOutput()
+	output, err := runLegacyPHP(t, legacyRoot, fixturePath)
 	if err != nil {
 		t.Fatalf("legacy PHP verifier failed: %v\n%s", err, output)
 	}
@@ -172,14 +211,58 @@ func TestLegacyPHPCompatibility(t *testing.T) {
 	t.Log(strings.TrimSpace(string(output)))
 }
 
+func TestLegacyPHPRejectsSemanticMismatch(t *testing.T) {
+	legacyRoot := os.Getenv("LEGACY_SOURCE_ROOT")
+	if legacyRoot == "" {
+		t.Skip("LEGACY_SOURCE_ROOT is not set; external legacy PHP compatibility was not run")
+	}
+	fixtures := readFixtures(t)
+	for index := range fixtures {
+		if fixtures[index].Case == "device-auth-normal" {
+			fixtures[index].Expected = map[string]string{
+				"AuthType":   "1",
+				"Credential": "synthetic-wrong",
+			}
+		}
+	}
+	body, err := json.Marshal(fixtures)
+	if err != nil {
+		t.Fatalf("marshal mismatched fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "semantic-mismatch.json")
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatalf("write mismatched fixture: %v", err)
+	}
+
+	output, err := runLegacyPHP(t, legacyRoot, path)
+	if err == nil {
+		t.Fatalf("legacy PHP verifier accepted a semantic mismatch: %s", output)
+	}
+}
+
+func runLegacyPHP(t *testing.T, legacyRoot, manifestPath string) ([]byte, error) {
+	t.Helper()
+	php, err := exec.LookPath("php")
+	if err != nil {
+		t.Fatalf("find PHP CLI: %v", err)
+	}
+	command := exec.Command(php, "verify_legacy_php.php", manifestPath)
+	command.Env = append(os.Environ(), "LEGACY_SOURCE_ROOT="+legacyRoot)
+	return command.CombinedOutput()
+}
+
 func buildSyntheticFixtures(t *testing.T, files *protoregistry.Files) []syntheticFixture {
 	t.Helper()
 
 	specs := []fixtureSpec{
-		{caseName: "transport-normal", messageType: "TransportMessage", setFields: setTransportFields},
+		{caseName: "transport-normal", messageType: "TransportMessage", expected: map[string]string{
+			"Id": "1", "AccessToken": "synthetic-token", "MsgType": "0", "Content": "absent", "RefMessageId": "101",
+		}, setFields: setTransportFields},
 		{caseName: "transport-boundary", messageType: "TransportMessage"},
 		{caseName: "transport-unknown", messageType: "TransportMessage", unknownScope: "outer", setFields: setTransportFields},
-		{caseName: "device-auth-normal", messageType: "DeviceAuthReqMessage", msgType: 1010, setFields: func(message protoreflect.Message) {
+		{caseName: "device-auth-normal", messageType: "DeviceAuthReqMessage", msgType: 1010, expected: map[string]string{
+			"AuthType": "1", "Credential": "synthetic-credential",
+		}, setFields: func(message protoreflect.Message) {
 			setEnum(message, "AuthType", 1)
 			setString(message, "Credential", "synthetic-credential")
 		}},
@@ -188,7 +271,9 @@ func buildSyntheticFixtures(t *testing.T, files *protoregistry.Files) []syntheti
 			setEnum(message, "AuthType", 1)
 			setString(message, "Credential", "synthetic-credential")
 		}},
-		{caseName: "heart-beat-normal", messageType: "HeartBeatMessage", msgType: 1001, setFields: func(message protoreflect.Message) {
+		{caseName: "heart-beat-normal", messageType: "HeartBeatMessage", msgType: 1001, expected: map[string]string{
+			"Imei": "synthetic-device", "WeChatId": "synthetic-wechat",
+		}, setFields: func(message protoreflect.Message) {
 			setString(message, "Imei", "synthetic-device")
 			setString(message, "WeChatId", "synthetic-wechat")
 		}},
@@ -197,10 +282,17 @@ func buildSyntheticFixtures(t *testing.T, files *protoregistry.Files) []syntheti
 			setString(message, "Imei", "synthetic-device")
 			setString(message, "WeChatId", "synthetic-wechat")
 		}},
-		{caseName: "friend-talk-normal", messageType: "FriendTalkNoticeMessage", msgType: 1024, setFields: setFriendTalkFields},
+		{caseName: "friend-talk-normal", messageType: "FriendTalkNoticeMessage", msgType: 1024, expected: map[string]string{
+			"WeChatId": "synthetic-wechat", "FriendId": "synthetic-friend", "ContentType": "1",
+			"Content": "synthetic-content", "MsgId": "201", "MsgSvrId": "202", "Ext": "synthetic-ext",
+			"CreateTime": "1", "NickName": "synthetic-name",
+		}, setFields: setFriendTalkFields},
 		{caseName: "friend-talk-boundary", messageType: "FriendTalkNoticeMessage", msgType: 1024},
 		{caseName: "friend-talk-unknown", messageType: "FriendTalkNoticeMessage", msgType: 1024, unknownScope: "inner", setFields: setFriendTalkFields},
-		{caseName: "talk-to-friend-normal", messageType: "TalkToFriendTaskMessage", msgType: 1070, setFields: setTalkToFriendFields},
+		{caseName: "talk-to-friend-normal", messageType: "TalkToFriendTaskMessage", msgType: 1070, expected: map[string]string{
+			"WeChatId": "synthetic-wechat", "FriendId": "synthetic-friend", "ContentType": "1",
+			"Content": "synthetic-content", "Remark": "synthetic-remark", "MsgId": "301", "Immediate": "true",
+		}, setFields: setTalkToFriendFields},
 		{caseName: "talk-to-friend-boundary", messageType: "TalkToFriendTaskMessage", msgType: 1070},
 		{caseName: "talk-to-friend-unknown", messageType: "TalkToFriendTaskMessage", msgType: 1070, unknownScope: "inner", setFields: setTalkToFriendFields},
 	}
@@ -260,6 +352,7 @@ func buildFixture(t *testing.T, files *protoregistry.Files, spec fixtureSpec, se
 		MsgType:      spec.msgType,
 		FrameHex:     hex.EncodeToString(frame),
 		UnknownScope: unknownScope,
+		Expected:     spec.expected,
 	}
 }
 

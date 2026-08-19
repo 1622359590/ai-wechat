@@ -58,45 +58,53 @@ func TestRecoveredSchema(t *testing.T) {
 	files := compileRecovered(t)
 
 	type fieldContract struct {
-		name   protoreflect.Name
-		number protoreflect.FieldNumber
-		kind   protoreflect.Kind
+		name     protoreflect.Name
+		number   protoreflect.FieldNumber
+		kind     protoreflect.Kind
+		typeName protoreflect.FullName
+	}
+	field := func(name protoreflect.Name, number protoreflect.FieldNumber, kind protoreflect.Kind, typeName ...protoreflect.FullName) fieldContract {
+		contract := fieldContract{name: name, number: number, kind: kind}
+		if len(typeName) == 1 {
+			contract.typeName = typeName[0]
+		}
+		return contract
 	}
 	contracts := map[string][]fieldContract{
 		"TransportMessage": {
-			{"Id", 1, protoreflect.Int64Kind},
-			{"AccessToken", 2, protoreflect.StringKind},
-			{"MsgType", 3, protoreflect.EnumKind},
-			{"Content", 4, protoreflect.MessageKind},
-			{"RefMessageId", 5, protoreflect.Int64Kind},
+			field("Id", 1, protoreflect.Int64Kind),
+			field("AccessToken", 2, protoreflect.StringKind),
+			field("MsgType", 3, protoreflect.EnumKind, protoPackage+".EnumMsgType"),
+			field("Content", 4, protoreflect.MessageKind, "google.protobuf.Any"),
+			field("RefMessageId", 5, protoreflect.Int64Kind),
 		},
 		"DeviceAuthReqMessage": {
-			{"AuthType", 1, protoreflect.EnumKind},
-			{"Credential", 2, protoreflect.StringKind},
+			field("AuthType", 1, protoreflect.EnumKind, protoPackage+".DeviceAuthReqMessage.EnumAuthType"),
+			field("Credential", 2, protoreflect.StringKind),
 		},
 		"HeartBeatMessage": {
-			{"Imei", 1, protoreflect.StringKind},
-			{"WeChatId", 2, protoreflect.StringKind},
+			field("Imei", 1, protoreflect.StringKind),
+			field("WeChatId", 2, protoreflect.StringKind),
 		},
 		"FriendTalkNoticeMessage": {
-			{"WeChatId", 1, protoreflect.StringKind},
-			{"FriendId", 3, protoreflect.StringKind},
-			{"ContentType", 5, protoreflect.EnumKind},
-			{"Content", 6, protoreflect.BytesKind},
-			{"MsgId", 7, protoreflect.Int64Kind},
-			{"msgSvrId", 8, protoreflect.Int64Kind},
-			{"Ext", 9, protoreflect.StringKind},
-			{"CreateTime", 10, protoreflect.Int64Kind},
-			{"NickName", 11, protoreflect.StringKind},
+			field("WeChatId", 1, protoreflect.StringKind),
+			field("FriendId", 3, protoreflect.StringKind),
+			field("ContentType", 5, protoreflect.EnumKind, protoPackage+".EnumContentType"),
+			field("Content", 6, protoreflect.BytesKind),
+			field("MsgId", 7, protoreflect.Int64Kind),
+			field("msgSvrId", 8, protoreflect.Int64Kind),
+			field("Ext", 9, protoreflect.StringKind),
+			field("CreateTime", 10, protoreflect.Int64Kind),
+			field("NickName", 11, protoreflect.StringKind),
 		},
 		"TalkToFriendTaskMessage": {
-			{"WeChatId", 1, protoreflect.StringKind},
-			{"FriendId", 2, protoreflect.StringKind},
-			{"ContentType", 3, protoreflect.EnumKind},
-			{"Content", 4, protoreflect.BytesKind},
-			{"Remark", 8, protoreflect.StringKind},
-			{"MsgId", 9, protoreflect.Int64Kind},
-			{"Immediate", 10, protoreflect.BoolKind},
+			field("WeChatId", 1, protoreflect.StringKind),
+			field("FriendId", 2, protoreflect.StringKind),
+			field("ContentType", 3, protoreflect.EnumKind, protoPackage+".EnumContentType"),
+			field("Content", 4, protoreflect.BytesKind),
+			field("Remark", 8, protoreflect.StringKind),
+			field("MsgId", 9, protoreflect.Int64Kind),
+			field("Immediate", 10, protoreflect.BoolKind),
 		},
 	}
 
@@ -104,6 +112,9 @@ func TestRecoveredSchema(t *testing.T) {
 		message := requireMessage(t, files, messageName)
 		if got, want := message.ParentFile().Package(), protoreflect.FullName(protoPackage); got != want {
 			t.Errorf("%s package = %q, want %q", messageName, got, want)
+		}
+		if got, want := message.ParentFile().Syntax(), protoreflect.Proto3; got != want {
+			t.Errorf("%s syntax = %s, want %s", messageName, got, want)
 		}
 		if got, want := message.Fields().Len(), len(expectedFields); got != want {
 			t.Errorf("%s field count = %d, want %d", messageName, got, want)
@@ -117,6 +128,18 @@ func TestRecoveredSchema(t *testing.T) {
 			if field.Number() != expected.number || field.Kind() != expected.kind {
 				t.Errorf("%s.%s = field %d/%s, want %d/%s", messageName, expected.name, field.Number(), field.Kind(), expected.number, expected.kind)
 			}
+			if expected.typeName != "" {
+				var got protoreflect.FullName
+				switch field.Kind() {
+				case protoreflect.EnumKind:
+					got = field.Enum().FullName()
+				case protoreflect.MessageKind:
+					got = field.Message().FullName()
+				}
+				if got != expected.typeName {
+					t.Errorf("%s.%s type = %q, want %q", messageName, expected.name, got, expected.typeName)
+				}
+			}
 		}
 	}
 
@@ -126,6 +149,10 @@ func TestRecoveredSchema(t *testing.T) {
 		"DeviceAuthReq":    1010,
 		"FriendTalkNotice": 1024,
 		"TalkToFriendTask": 1070,
+	})
+	requireEnumValues(t, files, "EnumContentType", map[string]int32{
+		"UnknownContent": 0,
+		"Text":           1,
 	})
 
 	auth := requireMessage(t, files, "DeviceAuthReqMessage").Enums().ByName("EnumAuthType")
