@@ -97,8 +97,8 @@
 - Produces: `ai-wechat-gateway` static binary, TCP `19090`, HTTP `/livez` and `/readyz` on `18080`.
 - Compose service runs non-root, read-only, `cap_drop: [ALL]`, `no-new-privileges`, resource limits and loopback-only published ports.
 
-- [ ] Write a container smoke script/test that requires live/ready 200 and verifies the process UID is non-zero.
-- [ ] Add a multi-stage Dockerfile and hardened Compose definition; validate `docker compose config`.
-- [ ] Start Docker Desktop if needed, build with no secrets, deploy local staging and run the smoke check.
-- [ ] If a remote target is discoverable, deploy the same immutable image to that test target; otherwise record the exact missing target information without exposing TCP publicly.
-- [ ] Run full tests, race detector, static checks, image inspection, public-repo security gate and independent review; then commit, push, PR and merge.
+- [x] Write a container smoke script/test that requires live/ready 200 and verifies the process UID is non-zero.
+- [x] Add a multi-stage Dockerfile and hardened Compose definition; validate `docker compose config`.
+- [x] Start Docker Desktop if needed, build with no secrets, deploy local staging and run the smoke check.
+- [x] If a remote target is discoverable, deploy the same immutable image to that test target; otherwise record the exact missing target information without exposing TCP publicly.
+- [x] Run full tests, race detector, static checks, image inspection, public-repo security gate and independent review; then commit, push, PR and merge.

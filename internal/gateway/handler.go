@@ -54,6 +54,9 @@ func (handler *Handler) Handle(ctx context.Context, session *Session, body []byt
 	}
 
 	if decoded.MsgType == 1010 {
+		if session.Authenticated() {
+			return nil, fmt.Errorf("%w: repeated authentication", ErrUnexpectedMessage)
+		}
 		if err := handler.authenticator.Authenticate(ctx, decoded.Payload); err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrAuthenticationFailed, err)
 		}

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"testing"
@@ -85,6 +86,79 @@ func TestServerRunsSyntheticFlowAndIsolatesBadConnection(t *testing.T) {
 	if service.Ready() {
 		t.Fatal("server stayed ready after shutdown")
 	}
+}
+
+func TestServerClosesConnectionAcceptedDuringShutdown(t *testing.T) {
+	serverConnection, clientConnection := net.Pipe()
+	defer clientConnection.Close()
+
+	service := server.New(server.Config{
+		MaxBodyBytes:               1024,
+		UnauthenticatedReadTimeout: time.Hour,
+		AuthenticatedReadTimeout:   time.Hour,
+		WriteTimeout:               time.Second,
+	}, rejectingHandler{})
+	listener := &shutdownOnAcceptListener{
+		connection: serverConnection,
+		shutdown: func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if err := service.Shutdown(ctx); err != nil {
+				t.Errorf("shutdown: %v", err)
+			}
+		},
+	}
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- service.Serve(listener) }()
+
+	if err := <-serveErr; err != nil {
+		t.Fatalf("serve returned error: %v", err)
+	}
+	if err := clientConnection.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+		if errors.Is(err, io.ErrClosedPipe) {
+			return
+		}
+		t.Fatalf("set read deadline: %v", err)
+	}
+	buffer := make([]byte, 1)
+	if _, err := clientConnection.Read(buffer); !errors.Is(err, io.EOF) {
+		t.Fatalf("read after shutdown error = %v, want EOF", err)
+	}
+}
+
+type shutdownOnAcceptListener struct {
+	connection net.Conn
+	shutdown   func()
+	closed     bool
+}
+
+func (listener *shutdownOnAcceptListener) Accept() (net.Conn, error) {
+	if listener.closed {
+		return nil, net.ErrClosed
+	}
+	listener.shutdown()
+	return listener.connection, nil
+}
+
+func (listener *shutdownOnAcceptListener) Close() error {
+	listener.closed = true
+	return nil
+}
+
+func (listener *shutdownOnAcceptListener) Addr() net.Addr {
+	return testAddress("shutdown-listener")
+}
+
+type testAddress string
+
+func (address testAddress) Network() string { return "test" }
+func (address testAddress) String() string  { return string(address) }
+
+type rejectingHandler struct{}
+
+func (rejectingHandler) Handle(context.Context, *gateway.Session, []byte) ([]byte, error) {
+	return nil, errors.New("unexpected message")
 }
 
 type acceptAuth struct{}

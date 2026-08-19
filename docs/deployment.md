@@ -1,7 +1,32 @@
 # 部署与容量基线
 
-状态：估算方案，尚未采购或部署
-最后更新：2026-08-18
+状态：本机安全 staging 已部署；远程环境待提供
+最后更新：2026-08-19
+
+## 当前可运行部署
+
+Go 协议网关已通过 `deploy/smoke.sh` 部署到本机 Docker，容器名为
+`ai-wechat-staging-gateway-1`。当前部署只用于合成协议和服务存活验证：默认鉴权器拒绝所有设备，不含真实凭证、客户数据、数据库、AI 或公网入口。
+
+- TCP：`127.0.0.1:19090`
+- 健康检查：`http://127.0.0.1:18080/livez`、`/readyz`
+- 容器：非 root UID/GID `65532:65532`、只读根文件系统、删除全部 Linux capabilities、启用 `no-new-privileges`
+- 限额：1 CPU、256 MiB 内存、100 PID，默认最大消息体 1 MiB
+- 镜像：scratch 运行时，仅包含静态 `gateway` 二进制
+
+本机启动或重建：
+
+```sh
+./deploy/smoke.sh
+```
+
+本机停止：
+
+```sh
+docker stop ai-wechat-staging-gateway-1
+```
+
+当前 Docker Desktop 缺少可调用的 credential helper；冒烟脚本在这种情况下会创建仅含空 `auths` 的临时客户端配置来拉取公开基础镜像，并在退出时删除，不会读取或覆盖用户 Docker 配置。这不影响生成镜像内容。远程部署尚缺测试服务器 SSH 地址/用户名、登录方式和允许开放的端口。提供目标前不会扫描主机或把未加 TLS 的 TCP 服务暴露到公网。
 
 ## 容量驱动因素
 

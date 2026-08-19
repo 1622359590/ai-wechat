@@ -68,6 +68,11 @@ func (server *Server) Serve(listener net.Listener) error {
 			return err
 		}
 		server.mu.Lock()
+		if server.closing.Load() {
+			server.mu.Unlock()
+			_ = connection.Close()
+			continue
+		}
 		server.connections[connection] = struct{}{}
 		server.wait.Add(1)
 		server.mu.Unlock()

@@ -1,0 +1,31 @@
+services:
+  gateway:
+    image: ai-wechat-gateway:local
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 1.0
+    environment:
+      GATEWAY_TCP_ADDRESS: ":19090"
+      GATEWAY_HEALTH_ADDRESS: ":18080"
+      GATEWAY_MAX_BODY_BYTES: "1048576"
+    ports:
+      - "127.0.0.1:19090:19090"
+      - "127.0.0.1:18080:18080"
+    healthcheck:
+      test: ["CMD", "/gateway", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      start_period: 3s
+      retries: 3
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m

@@ -45,6 +45,24 @@ func TestHandlerRequiresSuccessfulAuthentication(t *testing.T) {
 	}
 }
 
+func TestHandlerRejectsAuthenticationAfterSessionIsAuthenticated(t *testing.T) {
+	codec := loadCodec(t)
+	authenticator := &acceptAuthenticator{}
+	handler := gateway.NewHandler(codec, authenticator, gateway.NoopResponder{})
+	session := gateway.NewSession()
+	auth := fixtureBody(t, "device-auth-normal")
+
+	if _, err := handler.Handle(context.Background(), session, auth); err != nil {
+		t.Fatalf("initial authentication: %v", err)
+	}
+	if _, err := handler.Handle(context.Background(), session, auth); !errors.Is(err, gateway.ErrUnexpectedMessage) {
+		t.Fatalf("repeated authentication error = %v, want ErrUnexpectedMessage", err)
+	}
+	if authenticator.calls != 1 {
+		t.Fatalf("authenticator calls = %d, want 1", authenticator.calls)
+	}
+}
+
 func TestHandlerRoutesFriendTalkAndEncodesReply(t *testing.T) {
 	codec := loadCodec(t)
 	responder := &replyResponder{}
