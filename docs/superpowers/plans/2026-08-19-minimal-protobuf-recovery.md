@@ -69,29 +69,29 @@
 - Consumes: compiled message descriptors from Task 1.
 - Produces: 15 manifest entries with `case`, `message_type`, `msg_type`, `frame_hex`, and expected semantic fields.
 
-- [ ] **Step 1: Write a failing golden fixture test**
+- [x] **Step 1: Write a failing golden fixture test**
 
   Add three cases for each of the five message classes: normal values, empty/boundary values, and an inner message with unknown field 127 encoded as varint 1. For inner messages, pack the payload into `google.protobuf.Any` using `type.googleapis.com/<full-message-name>` and then into `TransportMessage`. For the transport-only trio, use `UnknownMsg` and empty/synthetic `Any` variants. Prefix every serialized transport body with a four-byte big-endian body length.
 
-- [ ] **Step 2: Run the fixture test and verify RED**
+- [x] **Step 2: Run the fixture test and verify RED**
 
   Run: `cd proto/compat && go test ./... -run TestSyntheticFramesMatchGolden -count=1`
 
   Expected: FAIL because `../testdata/synthetic_frames.json` is absent.
 
-- [ ] **Step 3: Generate the checked-in golden file through the test update flag**
+- [x] **Step 3: Generate the checked-in golden file through the test update flag**
 
   Run: `cd proto/compat && go test ./... -run TestSyntheticFramesMatchGolden -count=1 -update`
 
   The update path writes deterministic, indented JSON and refuses values that do not match the `synthetic-*` allowlist or allowed fixed byte strings.
 
-- [ ] **Step 4: Verify framing and unknown-field round trips**
+- [x] **Step 4: Verify framing and unknown-field round trips**
 
   Run: `cd proto/compat && go test ./... -run 'TestSyntheticFramesMatchGolden|TestFrameLengthPrefix|TestUnknownFieldRoundTrip' -count=1`
 
   Expected: PASS; 15 entries exist, every prefix equals body length, and field 127 survives decode → encode.
 
-- [ ] **Step 5: Commit the fixture slice**
+- [x] **Step 5: Commit the fixture slice**
 
   Stage the fixture test and JSON after secret/identifier scans, then commit with `test(proto): add synthetic compatibility frames`.
 
