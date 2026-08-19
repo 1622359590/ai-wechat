@@ -1,41 +1,20 @@
 package compat_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/bufbuild/protocompile"
+	"github.com/1622359590/ai-wechat/proto/schema"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 const protoPackage = "Jubo.JuLiao.IM.Wx.Proto"
 
-var recoveredProtoFiles = []string{
-	"TransportMessage.proto",
-	"DeviceAuthReq.proto",
-	"HeartBeat.proto",
-	"FriendTalkNotice.proto",
-	"TalkToFriendTask.proto",
-}
-
 func compileRecovered(t *testing.T) *protoregistry.Files {
 	t.Helper()
-
-	resolver := protocompile.WithStandardImports(&protocompile.SourceResolver{
-		ImportPaths: []string{"../minimal"},
-	})
-	compiler := protocompile.Compiler{Resolver: resolver}
-	compiled, err := compiler.Compile(context.Background(), recoveredProtoFiles...)
+	registry, err := schema.Load()
 	if err != nil {
-		t.Fatalf("compile recovered schema: %v", err)
-	}
-
-	registry := new(protoregistry.Files)
-	for _, file := range compiled {
-		if err := registry.RegisterFile(file); err != nil {
-			t.Fatalf("register %s: %v", file.Path(), err)
-		}
+		t.Fatalf("load recovered schema: %v", err)
 	}
 	return registry
 }
