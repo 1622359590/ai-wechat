@@ -1,0 +1,10 @@
+---
+description: Canonical AI WeChat project workflow and safety entry point
+alwaysApply: true
+---
+
+# AI WeChat Cursor Rules
+
+Before editing, read `AI_CONTEXT.md`, `PROJECT_STATUS.md`, and the active `docs/tasks/TASK-xxxx.md`.
+
+Treat `AI_CONTEXT.md` as the canonical shared policy. Keep the current task document updated with scope, decisions, changed files, and exact verification results. This repository is public: never add secrets, customer/chat data, device identifiers, databases, logs, captures, production payloads, or sensitive binary files.

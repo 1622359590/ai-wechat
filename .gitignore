@@ -1,0 +1,72 @@
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+*.local
+config/local.*
+config/production.*
+
+# Credentials, keys and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials*.json
+secrets*.json
+secret/
+secrets/
+
+# Databases and exports
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+*.rdb
+backups/
+dumps/
+
+# Logs, runtime state and captures
+*.log
+logs/
+runtime/
+tmp/
+temp/
+*.pid
+*.sock
+*.pcap
+*.pcapng
+crash-dumps/
+
+# Customer, chat and production data
+customer_data/
+customer-data/
+customer_chats.*
+chat_exports/
+production_data/
+production-data/
+fixtures/private/
+sensitive_*.bin
+
+# Dependencies and build output
+vendor/
+node_modules/
+.venv/
+venv/
+__pycache__/
+dist/
+build/
+coverage/
+
+# IDE and operating system
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local worktrees
+.worktrees/
+worktrees/
