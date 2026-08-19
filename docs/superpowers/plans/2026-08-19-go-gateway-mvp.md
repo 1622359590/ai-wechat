@@ -53,11 +53,11 @@
 - Produces: `protocol.NewCodec(*protoregistry.Files)`, `Decode([]byte) (*Decoded, error)`, and `EncodeTalkToFriend(Reply) ([]byte, error)`.
 - `Decoded` exposes only message ID, ref ID, MsgType, type URL and dynamic payload; callers do not log payload fields.
 
-- [ ] Write frame tests for valid, half reads, two concatenated frames, zero, oversized, truncated header/body and writer limit.
-- [ ] Verify frame tests RED, implement exact reads and typed sentinel errors, then verify GREEN.
-- [ ] Write protocol tests that replay all 15 fixtures, reject mismatched/missing Any and preserve unknown fields.
-- [ ] Verify protocol tests RED, implement the four-value mapping and talk-to-friend encoder, then verify GREEN.
-- [ ] Run `go test ./internal/frame ./internal/protocol -count=1` and commit `feat(gateway): add frame and protocol codecs`.
+- [x] Write frame tests for valid, half reads, two concatenated frames, zero, oversized, truncated header/body and writer limit.
+- [x] Verify frame tests RED, implement exact reads and typed sentinel errors, then verify GREEN.
+- [x] Write protocol tests that replay all 15 fixtures, reject mismatched/missing Any and preserve unknown fields.
+- [x] Verify protocol tests RED, implement the four-value mapping and talk-to-friend encoder, then verify GREEN.
+- [x] Run `go test ./internal/frame ./internal/protocol -count=1` and commit `feat(gateway): add frame and protocol codecs`.
 
 ### Task 3: Connection state, TCP server and health
 
