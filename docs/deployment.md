@@ -1,6 +1,6 @@
 # 部署与容量基线
 
-状态：本机安全 staging 已部署；远程环境待提供
+状态：本机和远程安全 staging 已部署；公网入口未开放
 最后更新：2026-08-19
 
 ## 当前可运行部署
@@ -26,7 +26,24 @@ Go 协议网关已通过 `deploy/smoke.sh` 部署到本机 Docker，容器名为
 docker stop ai-wechat-staging-gateway-1
 ```
 
-当前 Docker Desktop 缺少可调用的 credential helper；冒烟脚本在这种情况下会创建仅含空 `auths` 的临时客户端配置来拉取公开基础镜像，并在退出时删除，不会读取或覆盖用户 Docker 配置。这不影响生成镜像内容。远程部署尚缺测试服务器 SSH 地址/用户名、登录方式和允许开放的端口。提供目标前不会扫描主机或把未加 TLS 的 TCP 服务暴露到公网。
+当前 Docker Desktop 缺少可调用的 credential helper；冒烟脚本在这种情况下会创建仅含空 `auths` 的临时客户端配置来拉取公开基础镜像，并在退出时删除，不会读取或覆盖用户 Docker 配置。这不影响生成镜像内容。
+
+## 远程 staging
+
+2026-08-19 已通过宝塔面板在一台 Alibaba Cloud Linux 3、x86-64 测试服务器上完成部署。公开仓库不记录服务器 IP、面板入口或凭据。
+
+- 部署目录：`/opt/ai-wechat-gateway`
+- 镜像：`ai-wechat-gateway:443432e`
+- 运行方式：宝塔 Docker Compose 项目 `ai-wechat-gateway`
+- TCP：远程主机 `127.0.0.1:19090`
+- 健康检查：远程主机 `127.0.0.1:18080`
+- 限额：1 CPU、256 MiB、100 PID
+- 安全：UID/GID `65532:65532`、只读根文件系统、`cap_drop: ALL`、`no-new-privileges`
+- 产物：Linux AMD64 静态二进制，SHA-256 `ed33670c9abe908856f5f10a99435147e2870d05fcd4bfb4a240cbb2d41ab95d`
+
+服务器端实际验证结果：容器 `running` 且 `healthy`，重启次数为 0；`/livez`、`/readyz` 均返回 200；异常 TCP 帧后仍为 `healthy` 且无重启；`ss` 确认 18080/19090 仅监听 `127.0.0.1`。空载采样约使用 2.1 MiB 容器内存、5 个 PID 和接近 0% CPU；该数字只代表无设备连接的存活基线，不是容量结论。
+
+远程环境当前只用于服务存活和协议安全验证。开放设备连接前必须完成真实鉴权适配、TLS 或受控专网入口、防火墙白名单、面板 HTTPS、面板凭据轮换和系统安全更新评估。
 
 ## 容量驱动因素
 

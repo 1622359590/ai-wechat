@@ -20,6 +20,7 @@
 - 新增 Go TCP 网关最小闭环：安全帧解析、动态 Protobuf 路由、鉴权状态、心跳、好友消息和发送任务编码。
 - 新增连接 deadline、坏连接隔离、优雅关闭，以及 `/livez`、`/readyz` 健康检查。
 - 新增非 root、只读根文件系统的 scratch 容器与回环地址限定的本机 staging 部署。
+- 在 x86-64 Alibaba Cloud Linux 3 服务器完成回环地址限定的远程 Docker staging，并验证健康、资源限制、产物哈希和异常帧隔离。
 
 ### 安全
 
