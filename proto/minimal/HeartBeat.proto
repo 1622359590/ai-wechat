@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package Jubo.JuLiao.IM.Wx.Proto;
+
+message HeartBeatMessage {
+  string Imei = 1;
+  string WeChatId = 2;
+}

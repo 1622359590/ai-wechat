@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package Jubo.JuLiao.IM.Wx.Proto;
+
+import "TransportMessage.proto";
+
+message FriendTalkNoticeMessage {
+  string WeChatId = 1;
+  string FriendId = 3;
+  EnumContentType ContentType = 5;
+  bytes Content = 6;
+  int64 MsgId = 7;
+  int64 msgSvrId = 8;
+  string Ext = 9;
+  int64 CreateTime = 10;
+  string NickName = 11;
+}

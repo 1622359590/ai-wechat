@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package Jubo.JuLiao.IM.Wx.Proto;
+
+import "google/protobuf/any.proto";
+
+enum EnumMsgType {
+  UnknownMsg = 0;
+  HeartBeatReq = 1001;
+  DeviceAuthReq = 1010;
+  FriendTalkNotice = 1024;
+  TalkToFriendTask = 1070;
+}
+
+enum EnumContentType {
+  UnknownContent = 0;
+  Text = 1;
+}
+
+message TransportMessage {
+  int64 Id = 1;
+  string AccessToken = 2;
+  EnumMsgType MsgType = 3;
+  google.protobuf.Any Content = 4;
+  int64 RefMessageId = 5;
+}
