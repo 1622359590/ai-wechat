@@ -14,6 +14,10 @@
 
 - `TASK-0001`：跨 AI 协作规范、架构基线、成本模型和公开仓库安全边界已完成，Draft PR：<https://github.com/1622359590/ai-wechat/pull/2>。
 
+## 协作授权
+
+- 在用户本人已认证的 GitHub 环境中，AI 可直接执行分支、提交、推送、PR、验证后合并和合并后同步，不需要逐次请求用户审阅；高风险例外以 `AI_CONTEXT.md` 为准。
+
 ## 已确认事实
 
 - 现有系统基于 ThinkPHP、Workerman/Swoole、Redis 队列和 Google Protobuf。
