@@ -125,21 +125,21 @@ Expected: all adapters reference the canonical file and every sample sensitive p
 
 - [x] **Step 1: Scan for secrets and accidental legacy files**
 
-Run: `git status --short && git diff --check && rg -n --hidden -g '!.git/**' '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|AKID[A-Za-z0-9]|password\s*[:=]\s*[^<[:space:]]+|api[_-]?key\s*[:=]\s*[^<[:space:]]+)' .`
+Run: `git status --short && git diff --check && if git grep --cached -nIiE '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|AKID[[:alnum:]]+|password[[:space:]]*[:=][[:space:]]*[^<[:space:]]+|api[_-]?key[[:space:]]*[:=][[:space:]]*[^<[:space:]]+)' -- .; then echo 'potential credential found'; exit 1; else test "$?" -eq 1; fi`
 
 Expected: only intended documentation/configuration files are present, `git diff --check` emits no errors, and the pattern scan finds no real credentials.
 
-- [ ] **Step 2: Record verification results**
+- [x] **Step 2: Record verification results**
 
 Set `TASK-0001` to complete, list the exact verification commands and outcomes, update `PROJECT_STATUS.md` with the next task, and add the initialization entry to `CHANGELOG.md`.
 
-- [ ] **Step 3: Commit the reviewed scope**
+- [x] **Step 3: Commit the reviewed scope**
 
-Run: `git add . && git diff --cached --stat && git diff --cached --check && git commit -m "docs: initialize AI project governance"`
+Run: `git add -- .cursor/rules/ai-wechat.mdc .github/copilot-instructions.md .gitignore AGENTS.md AI_CONTEXT.md CHANGELOG.md CLAUDE.md GEMINI.md PROJECT_STATUS.md docs/ai-model-routing.md docs/architecture.md docs/cost-estimate.md docs/database-schema.md docs/decisions/0001-progressive-rewrite.md docs/deployment.md docs/design/2026-08-18-project-governance.md docs/memory-and-knowledge.md docs/module-map.md docs/protocol.md docs/superpowers/plans/2026-08-18-project-governance.md docs/tasks/TASK-0001.md && git diff --cached --name-status && git diff --cached --check && git commit -m "docs: initialize AI project governance"`
 
 Expected: one initial commit containing only the approved governance and planning files.
 
-- [ ] **Step 4: Publish for review**
+- [x] **Step 4: Publish for review**
 
 Push branch `agent/project-governance` to `1622359590/ai-wechat` and open a Draft PR titled `docs: initialize AI project governance`.
 

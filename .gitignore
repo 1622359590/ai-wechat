@@ -13,6 +13,10 @@ config/production.*
 *.pfx
 *.jks
 *.keystore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
 credentials*.json
 secrets*.json
 secret/
@@ -23,7 +27,9 @@ secrets/
 *.db-*
 *.sqlite
 *.sqlite3
-*.sql
+*.sql.gz
+*.sql.bz2
+*.sql.xz
 *.dump
 *.rdb
 backups/

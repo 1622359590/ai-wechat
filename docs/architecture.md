@@ -20,6 +20,8 @@ flowchart LR
     R --> A["Python AI 编排服务"]
     B --> P[(PostgreSQL)]
     A --> P
+    B --> S[(对象存储)]
+    A --> S
     G --> C[(Redis)]
     A --> M["MemoryService"]
     M --> TM["TencentDB Agent Memory 适配器"]
@@ -51,6 +53,7 @@ flowchart LR
 | Python AI 服务 | 分类、检索、模型路由、记忆抽取、批处理 | 业务最终权限判断、设备协议 |
 | MemoryService | 记忆写入、查询、删除、版本和来源 | 客户回复生成 |
 | KnowledgeService | 文档检索、引用、图谱查询 | 保存权威业务交易状态 |
+| 对象存储 | 加密保存媒体、附件和大对象，执行租户权限与生命周期策略 | 连接状态、消息索引、业务事务 |
 
 ## 可靠性原则
 
