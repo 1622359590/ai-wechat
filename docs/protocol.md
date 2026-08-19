@@ -1,6 +1,6 @@
 # 客服通信协议调查基线
 
-状态：部分确认，仍需恢复与实测
+状态：最小子集已恢复并完成合成兼容测试，真实设备仍需实测
 最后更新：2026-08-19
 
 ## 已确认内容
@@ -12,8 +12,26 @@
 - PHP 依赖 Google Protobuf，生成代码位于旧服务端的 `extend/lib/protobuf`。
 - 已发现 `TransportMessage.php`、`EnumMsgType.php`、`DeviceAuthReqMessage.php`、`FriendTalkNoticeMessage.php`、`TalkToFriendTaskMessage.php` 等生成类，以及 `GPBMetadata` 描述符。
 - 当前生成 `EnumMsgType.php` 有 225 个数字常量；`app/common/workerman/wechat` 有 138 个 PHP 文件、约 14,438 行。
+- 已恢复五个可编译的最小 Protobuf 3 文件，package 为 `Jubo.JuLiao.IM.Wx.Proto`；Go 描述符测试和旧 PHP 生成类均可往返 15 个公开安全的合成帧。
+- 合成帧使用四字节大端长度头；Go 与旧 PHP 均保留测试加入的未知字段 127。
 
 上述路径是对本机旧源码的调查记录，不是本公开仓库当前内容。
+
+## 已恢复的最小 wire schema
+
+源文件位于 [`proto/minimal`](../proto/minimal)，只恢复首条链路所需子集，不等同于完整旧协议。
+
+| 消息 | 字段号与类型 |
+|---|---|
+| `TransportMessage` | `Id=1 int64`、`AccessToken=2 string`、`MsgType=3 EnumMsgType`、`Content=4 google.protobuf.Any`、`RefMessageId=5 int64` |
+| `DeviceAuthReqMessage` | `AuthType=1 EnumAuthType`、`Credential=2 string` |
+| `HeartBeatMessage` | `Imei=1 string`、`WeChatId=2 string` |
+| `FriendTalkNoticeMessage` | `WeChatId=1 string`、`FriendId=3 string`、`ContentType=5 EnumContentType`、`Content=6 bytes`、`MsgId=7 int64`、`msgSvrId=8 int64`、`Ext=9 string`、`CreateTime=10 int64`、`NickName=11 string` |
+| `TalkToFriendTaskMessage` | `WeChatId=1 string`、`FriendId=2 string`、`ContentType=3 EnumContentType`、`Content=4 bytes`、`Remark=8 string`、`MsgId=9 int64`、`Immediate=10 bool` |
+
+首批消息类型：`HeartBeatReq=1001`、`DeviceAuthReq=1010`、`FriendTalkNotice=1024`、`TalkToFriendTask=1070`。认证类型：`Default=0`、`DeviceCode=1`、`Username=2`、`InternalCode=3`。内容类型当前只恢复 `UnknownContent=0` 和 `Text=1`。
+
+合成夹具位于 [`proto/testdata/synthetic_frames.json`](../proto/testdata/synthetic_frames.json)，每类包含 normal、boundary 和 unknown 三种，共 15 个。内层 `Any.type_url` 使用 `type.googleapis.com/Jubo.JuLiao.IM.Wx.Proto.<MessageName>`；该格式已通过合成 Go/PHP 兼容测试，但真实设备是否完全一致仍待实测。
 
 ## 尚未确认
 
@@ -23,16 +41,15 @@
 - AccessToken 生命周期、重放防护和设备身份绑定。
 - 心跳间隔、断线重连、重复消息和 ack 语义。
 - 时间字段的秒/毫秒单位；原文档存在不一致。
-- `Any.type_url` 规范和所有 MsgType 到消息体类型的完整映射。
+- 真实设备使用的 `Any.type_url` 是否与合成夹具一致，以及所有 MsgType 到消息体类型的完整映射。
 - 文档中重复或疑似拼写错误的消息定义应以何者为准。
 
-## 恢复 `.proto` 的建议流程
+## 后续恢复流程
 
-1. 从 `GPBMetadata` 和生成 PHP 类提取 package、message、field number、类型、repeated/map/oneof 信息。
-2. 为枚举和根消息先建立最小 `.proto`，使用固定二进制样本做双向兼容测试。
-3. 按实际业务优先级恢复认证、心跳、好友消息和发送任务，而不是一次恢复全部枚举。
-4. 用现有 PHP 实现和 Go 新实现对同一脱敏样本进行 decode → encode 字节对比。
-5. 对未知字段保持 Protobuf 兼容，不随意复用已出现过的 field number。
+1. TASK-0004 使用已恢复最小协议实现 Go 帧解析和消息路由，不重新定义字段。
+2. TASK-0005 用真实测试设备和不可逆脱敏样本确认 `Any.type_url`、时间单位和连接行为。
+3. 发现新消息时继续从 `GPBMetadata` 恢复 package、message、field number、类型、repeated/map/oneof，并补兼容 fixture。
+4. 对未知字段保持 Protobuf 兼容，不随意复用已出现过的 field number。
 
 ## Go 网关最低安全要求
 

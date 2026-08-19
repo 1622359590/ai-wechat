@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package Jubo.JuLiao.IM.Wx.Proto;
+
+message DeviceAuthReqMessage {
+  enum EnumAuthType {
+    Default = 0;
+    DeviceCode = 1;
+    Username = 2;
+    InternalCode = 3;
+  }
+
+  EnumAuthType AuthType = 1;
+  string Credential = 2;
+}

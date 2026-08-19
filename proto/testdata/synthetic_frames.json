@@ -1,0 +1,142 @@
+[
+  {
+    "case": "transport-normal",
+    "message_type": "TransportMessage",
+    "msg_type": 0,
+    "frame_hex": "000000150801120f73796e7468657469632d746f6b656e2865",
+    "unknown_scope": "none",
+    "expected": {
+      "AccessToken": "synthetic-token",
+      "Content": "absent",
+      "Id": "1",
+      "MsgType": "0",
+      "RefMessageId": "101"
+    }
+  },
+  {
+    "case": "transport-boundary",
+    "message_type": "TransportMessage",
+    "msg_type": 0,
+    "frame_hex": "00000000",
+    "unknown_scope": "none"
+  },
+  {
+    "case": "transport-unknown",
+    "message_type": "TransportMessage",
+    "msg_type": 0,
+    "frame_hex": "000000180801120f73796e7468657469632d746f6b656e2865f80701",
+    "unknown_scope": "outer"
+  },
+  {
+    "case": "device-auth-normal",
+    "message_type": "DeviceAuthReqMessage",
+    "msg_type": 1010,
+    "frame_hex": "000000760804120f73796e7468657469632d746f6b656e18f207225c0a40747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e446576696365417574685265714d65737361676512180801121473796e7468657469632d63726564656e7469616c2868",
+    "unknown_scope": "none",
+    "expected": {
+      "AuthType": "1",
+      "Credential": "synthetic-credential"
+    }
+  },
+  {
+    "case": "device-auth-boundary",
+    "message_type": "DeviceAuthReqMessage",
+    "msg_type": 1010,
+    "frame_hex": "0000005c0805120f73796e7468657469632d746f6b656e18f20722420a40747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e446576696365417574685265714d6573736167652869",
+    "unknown_scope": "none"
+  },
+  {
+    "case": "device-auth-unknown",
+    "message_type": "DeviceAuthReqMessage",
+    "msg_type": 1010,
+    "frame_hex": "000000790806120f73796e7468657469632d746f6b656e18f207225f0a40747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e446576696365417574685265714d657373616765121b0801121473796e7468657469632d63726564656e7469616cf80701286a",
+    "unknown_scope": "inner"
+  },
+  {
+    "case": "heart-beat-normal",
+    "message_type": "HeartBeatMessage",
+    "msg_type": 1001,
+    "frame_hex": "0000007e0807120f73796e7468657469632d746f6b656e18e90722640a3c747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e4865617274426561744d65737361676512240a1073796e7468657469632d646576696365121073796e7468657469632d776563686174286b",
+    "unknown_scope": "none",
+    "expected": {
+      "Imei": "synthetic-device",
+      "WeChatId": "synthetic-wechat"
+    }
+  },
+  {
+    "case": "heart-beat-boundary",
+    "message_type": "HeartBeatMessage",
+    "msg_type": 1001,
+    "frame_hex": "000000580808120f73796e7468657469632d746f6b656e18e907223e0a3c747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e4865617274426561744d657373616765286c",
+    "unknown_scope": "none"
+  },
+  {
+    "case": "heart-beat-unknown",
+    "message_type": "HeartBeatMessage",
+    "msg_type": 1001,
+    "frame_hex": "000000810809120f73796e7468657469632d746f6b656e18e90722670a3c747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e4865617274426561744d65737361676512270a1073796e7468657469632d646576696365121073796e7468657469632d776563686174f80701286d",
+    "unknown_scope": "inner"
+  },
+  {
+    "case": "friend-talk-normal",
+    "message_type": "FriendTalkNoticeMessage",
+    "msg_type": 1024,
+    "frame_hex": "000000c2080a120f73796e7468657469632d746f6b656e18800822a7010a43747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e467269656e6454616c6b4e6f746963654d65737361676512600a1073796e7468657469632d7765636861741a1073796e7468657469632d667269656e642801321173796e7468657469632d636f6e74656e7438c90140ca014a0d73796e7468657469632d65787450015a0e73796e7468657469632d6e616d65286e",
+    "unknown_scope": "none",
+    "expected": {
+      "Content": "synthetic-content",
+      "ContentType": "1",
+      "CreateTime": "1",
+      "Ext": "synthetic-ext",
+      "FriendId": "synthetic-friend",
+      "MsgId": "201",
+      "MsgSvrId": "202",
+      "NickName": "synthetic-name",
+      "WeChatId": "synthetic-wechat"
+    }
+  },
+  {
+    "case": "friend-talk-boundary",
+    "message_type": "FriendTalkNoticeMessage",
+    "msg_type": 1024,
+    "frame_hex": "0000005f080b120f73796e7468657469632d746f6b656e18800822450a43747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e467269656e6454616c6b4e6f746963654d657373616765286f",
+    "unknown_scope": "none"
+  },
+  {
+    "case": "friend-talk-unknown",
+    "message_type": "FriendTalkNoticeMessage",
+    "msg_type": 1024,
+    "frame_hex": "000000c5080c120f73796e7468657469632d746f6b656e18800822aa010a43747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e467269656e6454616c6b4e6f746963654d65737361676512630a1073796e7468657469632d7765636861741a1073796e7468657469632d667269656e642801321173796e7468657469632d636f6e74656e7438c90140ca014a0d73796e7468657469632d65787450015a0e73796e7468657469632d6e616d65f807012870",
+    "unknown_scope": "inner"
+  },
+  {
+    "case": "talk-to-friend-normal",
+    "message_type": "TalkToFriendTaskMessage",
+    "msg_type": 1070,
+    "frame_hex": "000000b2080d120f73796e7468657469632d746f6b656e18ae082297010a43747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e54616c6b546f467269656e645461736b4d65737361676512500a1073796e7468657469632d776563686174121073796e7468657469632d667269656e641801221173796e7468657469632d636f6e74656e74421073796e7468657469632d72656d61726b48ad0250012871",
+    "unknown_scope": "none",
+    "expected": {
+      "Content": "synthetic-content",
+      "ContentType": "1",
+      "FriendId": "synthetic-friend",
+      "Immediate": "true",
+      "MsgId": "301",
+      "Remark": "synthetic-remark",
+      "WeChatId": "synthetic-wechat"
+    }
+  },
+  {
+    "case": "talk-to-friend-boundary",
+    "message_type": "TalkToFriendTaskMessage",
+    "msg_type": 1070,
+    "frame_hex": "0000005f080e120f73796e7468657469632d746f6b656e18ae0822450a43747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e54616c6b546f467269656e645461736b4d6573736167652872",
+    "unknown_scope": "none"
+  },
+  {
+    "case": "talk-to-friend-unknown",
+    "message_type": "TalkToFriendTaskMessage",
+    "msg_type": 1070,
+    "frame_hex": "000000b5080f120f73796e7468657469632d746f6b656e18ae08229a010a43747970652e676f6f676c65617069732e636f6d2f4a75626f2e4a754c69616f2e494d2e57782e50726f746f2e54616c6b546f467269656e645461736b4d65737361676512530a1073796e7468657469632d776563686174121073796e7468657469632d667269656e641801221173796e7468657469632d636f6e74656e74421073796e7468657469632d72656d61726b48ad025001f807012873",
+    "unknown_scope": "inner"
+  }
+]
