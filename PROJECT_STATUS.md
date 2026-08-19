@@ -12,7 +12,7 @@
 
 ## 最近完成
 
-- `TASK-0001`：跨 AI 协作规范、架构基线、成本模型和公开仓库安全边界已完成，Draft PR：<https://github.com/1622359590/ai-wechat/pull/2>。
+- `TASK-0001`：跨 AI 协作规范、架构基线、成本模型和公开仓库安全边界已完成，并通过 [PR #2](https://github.com/1622359590/ai-wechat/pull/2) 合并到 `main`（合并提交 `7ae1cae`）。
 
 ## 协作授权
 
