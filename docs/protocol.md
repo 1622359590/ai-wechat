@@ -1,23 +1,23 @@
 # 客服通信协议调查基线
 
 状态：部分确认，仍需恢复与实测
-最后更新：2026-08-18
+最后更新：2026-08-19
 
 ## 已确认内容
 
 - 设备与服务端使用 TCP 长连接。
-- 单帧由四字节数据长度和 Protobuf 消息体组成。
+- 单帧由四字节数据长度和 Protobuf 消息体组成。旧 PHP 发送使用 `pack('N', strlen(message))`、接收使用 `unpack('N', buffer)`，确认长度头为网络字节序（大端），且长度不包含四字节头。
 - 根消息为 `TransportMessage`，已观察字段包括 `Id`、`AccessToken`、`MsgType`、`Content` 和 `RefMessageId`。
 - `Content` 使用 Protobuf `Any` 承载具体消息。
 - PHP 依赖 Google Protobuf，生成代码位于旧服务端的 `extend/lib/protobuf`。
 - 已发现 `TransportMessage.php`、`EnumMsgType.php`、`DeviceAuthReqMessage.php`、`FriendTalkNoticeMessage.php`、`TalkToFriendTaskMessage.php` 等生成类，以及 `GPBMetadata` 描述符。
-- 消息类型枚举约 160 项；业务处理目录约 117 个文件、约 14,438 行。
+- 当前生成 `EnumMsgType.php` 有 225 个数字常量；`app/common/workerman/wechat` 有 138 个 PHP 文件、约 14,438 行。
 
 上述路径是对本机旧源码的调查记录，不是本公开仓库当前内容。
 
 ## 尚未确认
 
-- 四字节长度的大小端、长度是否包含头部、零长度是否合法。
+- 零长度是否合法，以及设备端是否存在不同版本的帧格式。
 - 最大帧长、拆包/粘包策略和慢速连接超时。
 - TLS 或应用层加密是否存在，以及证书和密钥轮换方式。
 - AccessToken 生命周期、重放防护和设备身份绑定。
