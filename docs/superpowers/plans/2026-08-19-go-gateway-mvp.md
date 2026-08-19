@@ -76,11 +76,11 @@
 - `gateway.Handler.Handle(context.Context, *Session, []byte) ([]byte, error)`.
 - `server.Server.Serve(net.Listener) error`, `Shutdown(context.Context) error`, readiness callback.
 
-- [ ] Write handler tests for pre-auth rejection, deny-all, successful auth, heartbeat, friend event and optional reply.
-- [ ] Verify handler RED; implement session state and message dispatch; verify GREEN.
-- [ ] Write localhost server tests for one complete synthetic flow, connection error isolation and shutdown.
-- [ ] Verify server RED; implement deadlines/accept loop; verify GREEN.
-- [ ] Write health tests, implement live/ready handlers and wire `cmd/gateway`; run `go test ./... -race -count=1` and commit `feat(gateway): serve authenticated protocol loop`.
+- [x] Write handler tests for pre-auth rejection, deny-all, successful auth, heartbeat, friend event and optional reply.
+- [x] Verify handler RED; implement session state and message dispatch; verify GREEN.
+- [x] Write localhost server tests for one complete synthetic flow, connection error isolation and shutdown.
+- [x] Verify server RED; implement deadlines/accept loop; verify GREEN.
+- [x] Write health tests, implement live/ready handlers and wire `cmd/gateway`; run `go test ./... -race -count=1` and commit `feat(gateway): serve authenticated protocol loop`.
 
 ### Task 4: Containerize, stage and document
 
