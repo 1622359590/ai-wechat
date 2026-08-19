@@ -105,27 +105,27 @@
 - Consumes: `LEGACY_SOURCE_ROOT`, external Composer autoload/generated classes, and `proto/testdata/synthetic_frames.json`.
 - Produces: a zero exit code and `legacy-php-fixtures=15` without printing frame contents.
 
-- [ ] **Step 1: Add the failing Go integration test**
+- [x] **Step 1: Add the failing Go integration test**
 
   When `LEGACY_SOURCE_ROOT` is present, execute `php verify_legacy_php.php ../testdata/synthetic_frames.json`; require exit 0 and the exact aggregate count. When the variable is absent, report an explicit Go test skip.
 
-- [ ] **Step 2: Run the integration test and verify RED**
+- [x] **Step 2: Run the integration test and verify RED**
 
   Run: `cd proto/compat && test -n "$LEGACY_SOURCE_ROOT" && go test ./... -run TestLegacyPHPCompatibility -count=1`
 
   Expected: FAIL because `verify_legacy_php.php` is absent.
 
-- [ ] **Step 3: Implement the PHP verifier**
+- [x] **Step 3: Implement the PHP verifier**
 
   Validate the environment path, require only Composer autoload plus the five approved GPBMetadata/generated-class pairs, decode the four-byte frame prefix and outer `TransportMessage`, decode inner `Any.value` according to the manifest message type, reserialize both layers, and assert semantic equality plus unknown field 127 retention. Never log decoded values or hex payloads.
 
-- [ ] **Step 4: Run Go and PHP compatibility tests**
+- [x] **Step 4: Run Go and PHP compatibility tests**
 
   Run: `cd proto/compat && test -n "$LEGACY_SOURCE_ROOT" && go test ./... -count=1`
 
   Expected: PASS and `legacy-php-fixtures=15` appears in the integration test output when run with `-v`.
 
-- [ ] **Step 5: Commit the PHP compatibility slice**
+- [x] **Step 5: Commit the PHP compatibility slice**
 
   Stage only the verifier and integration-test change; run the staged-index credential scan and commit with `test(proto): verify legacy PHP compatibility`.
 

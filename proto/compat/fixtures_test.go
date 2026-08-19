@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -147,6 +148,28 @@ func TestUnknownFieldRoundTrip(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLegacyPHPCompatibility(t *testing.T) {
+	legacyRoot := os.Getenv("LEGACY_SOURCE_ROOT")
+	if legacyRoot == "" {
+		t.Skip("LEGACY_SOURCE_ROOT is not set; external legacy PHP compatibility was not run")
+	}
+	php, err := exec.LookPath("php")
+	if err != nil {
+		t.Fatalf("find PHP CLI: %v", err)
+	}
+
+	command := exec.Command(php, "verify_legacy_php.php", fixturePath)
+	command.Env = append(os.Environ(), "LEGACY_SOURCE_ROOT="+legacyRoot)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("legacy PHP verifier failed: %v\n%s", err, output)
+	}
+	if got, want := strings.TrimSpace(string(output)), "legacy-php-fixtures=15"; got != want {
+		t.Fatalf("legacy PHP verifier output = %q, want %q", got, want)
+	}
+	t.Log(strings.TrimSpace(string(output)))
 }
 
 func buildSyntheticFixtures(t *testing.T, files *protoregistry.Files) []syntheticFixture {
