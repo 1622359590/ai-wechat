@@ -73,7 +73,7 @@ func TestFrameLengthPrefix(t *testing.T) {
 	files := compileRecovered(t)
 	transport := requireMessage(t, files, "TransportMessage")
 	fixtures := readFixtures(t)
-	if got, want := len(fixtures), 15; got != want {
+	if got, want := len(fixtures), 18; got != want {
 		t.Fatalf("fixture count = %d, want %d", got, want)
 	}
 
@@ -205,7 +205,7 @@ func TestLegacyPHPCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("legacy PHP verifier failed: %v\n%s", err, output)
 	}
-	if got, want := strings.TrimSpace(string(output)), "legacy-php-fixtures=15"; got != want {
+	if got, want := strings.TrimSpace(string(output)), "legacy-php-fixtures=18"; got != want {
 		t.Fatalf("legacy PHP verifier output = %q, want %q", got, want)
 	}
 	t.Log(strings.TrimSpace(string(output)))
@@ -270,6 +270,15 @@ func buildSyntheticFixtures(t *testing.T, files *protoregistry.Files) []syntheti
 		{caseName: "device-auth-unknown", messageType: "DeviceAuthReqMessage", msgType: 1010, unknownScope: "inner", setFields: func(message protoreflect.Message) {
 			setEnum(message, "AuthType", 1)
 			setString(message, "Credential", "synthetic-credential")
+		}},
+		{caseName: "device-auth-rsp-normal", messageType: "DeviceAuthRspMessage", msgType: 1011, expected: map[string]string{
+			"AccessToken": "synthetic-token", "Extra": "absent",
+		}, setFields: func(message protoreflect.Message) {
+			setString(message, "AccessToken", "synthetic-token")
+		}},
+		{caseName: "device-auth-rsp-boundary", messageType: "DeviceAuthRspMessage", msgType: 1011},
+		{caseName: "device-auth-rsp-unknown", messageType: "DeviceAuthRspMessage", msgType: 1011, unknownScope: "inner", setFields: func(message protoreflect.Message) {
+			setString(message, "AccessToken", "synthetic-token")
 		}},
 		{caseName: "heart-beat-normal", messageType: "HeartBeatMessage", msgType: 1001, expected: map[string]string{
 			"Imei": "synthetic-device", "WeChatId": "synthetic-wechat",

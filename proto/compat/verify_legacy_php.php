@@ -7,12 +7,13 @@ declare(strict_types=1);
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 
 use Jubo\JuLiao\IM\Wx\Proto\DeviceAuthReqMessage;
+use Jubo\JuLiao\IM\Wx\Proto\DeviceAuthRspMessage;
 use Jubo\JuLiao\IM\Wx\Proto\FriendTalkNoticeMessage;
 use Jubo\JuLiao\IM\Wx\Proto\HeartBeatMessage;
 use Jubo\JuLiao\IM\Wx\Proto\TalkToFriendTaskMessage;
 use Jubo\JuLiao\IM\Wx\Proto\TransportMessage;
 
-const EXPECTED_FIXTURE_COUNT = 15;
+const EXPECTED_FIXTURE_COUNT = 18;
 const PROTOBUF_TYPE_PREFIX = 'type.googleapis.com/Jubo.JuLiao.IM.Wx.Proto.';
 const UNKNOWN_FIELD_127 = "\xf8\x07\x01";
 
@@ -44,6 +45,7 @@ function newInnerMessage(string $messageType): object
 {
     return match ($messageType) {
         'DeviceAuthReqMessage' => new DeviceAuthReqMessage(),
+        'DeviceAuthRspMessage' => new DeviceAuthRspMessage(),
         'HeartBeatMessage' => new HeartBeatMessage(),
         'FriendTalkNoticeMessage' => new FriendTalkNoticeMessage(),
         'TalkToFriendTaskMessage' => new TalkToFriendTaskMessage(),
@@ -64,6 +66,10 @@ function expectedGetters(string $messageType): array
         'DeviceAuthReqMessage' => [
             'AuthType' => 'getAuthType',
             'Credential' => 'getCredential',
+        ],
+        'DeviceAuthRspMessage' => [
+            'AccessToken' => 'getAccessToken',
+            'Extra' => 'getExtra',
         ],
         'HeartBeatMessage' => [
             'Imei' => 'getImei',
@@ -185,11 +191,13 @@ try {
     foreach ([
         '/extend/lib/protobuf/GPBMetadata/TransportMessage.php',
         '/extend/lib/protobuf/GPBMetadata/DeviceAuthReq.php',
+        '/extend/lib/protobuf/GPBMetadata/DeviceAuthRsp.php',
         '/extend/lib/protobuf/GPBMetadata/HeartBeat.php',
         '/extend/lib/protobuf/GPBMetadata/FriendTalkNotice.php',
         '/extend/lib/protobuf/GPBMetadata/TalkToFriendTask.php',
         '/extend/lib/protobuf/Jubo/JuLiao/IM/Wx/Proto/TransportMessage.php',
         '/extend/lib/protobuf/Jubo/JuLiao/IM/Wx/Proto/DeviceAuthReqMessage.php',
+        '/extend/lib/protobuf/Jubo/JuLiao/IM/Wx/Proto/DeviceAuthRspMessage.php',
         '/extend/lib/protobuf/Jubo/JuLiao/IM/Wx/Proto/HeartBeatMessage.php',
         '/extend/lib/protobuf/Jubo/JuLiao/IM/Wx/Proto/FriendTalkNoticeMessage.php',
         '/extend/lib/protobuf/Jubo/JuLiao/IM/Wx/Proto/TalkToFriendTaskMessage.php',

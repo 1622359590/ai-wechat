@@ -8,8 +8,15 @@ enum EnumMsgType {
   UnknownMsg = 0;
   HeartBeatReq = 1001;
   DeviceAuthReq = 1010;
+  DeviceAuthRsp = 1011;
   FriendTalkNotice = 1024;
   TalkToFriendTask = 1070;
+}
+
+enum EnumAccountType {
+  UnknownAccountType = 0;
+  Main = 1;
+  SubUser = 2;
 }
 
 enum EnumContentType {

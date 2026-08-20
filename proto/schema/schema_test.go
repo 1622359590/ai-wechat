@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-func TestLoadReturnsFiveCachedProto3Files(t *testing.T) {
+func TestLoadReturnsSixCachedProto3Files(t *testing.T) {
 	const workers = 8
 	results := make(chan any, workers)
 	errors := make(chan error, workers)
@@ -63,7 +63,7 @@ func TestLoadReturnsFiveCachedProto3Files(t *testing.T) {
 		count++
 		return true
 	})
-	if got, want := count, 6; got != want {
-		t.Fatalf("registered file count = %d, want %d (five recovered plus Any)", got, want)
+	if got, want := count, 7; got != want {
+		t.Fatalf("registered file count = %d, want %d (six recovered plus Any)", got, want)
 	}
 }

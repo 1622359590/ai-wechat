@@ -36,17 +36,17 @@
 - Produces descriptor `Jubo.JuLiao.IM.Wx.Proto.DeviceAuthRspMessage` with `AccessToken=1 string`, optional nested `Extra=2`, and `EnumMsgType.DeviceAuthRsp=1011`.
 - Produces three public fixtures named `device-auth-rsp-normal`, `device-auth-rsp-boundary`, and `device-auth-rsp-unknown`.
 
-- [ ] **Step 1: Write failing schema and fixture tests**
+- [x] **Step 1: Write failing schema and fixture tests**
 
 Add literal field assertions for `DeviceAuthRspMessage`, all six `ExtraMessage` fields, enum 1011, exact type URL, a hand-checked `synthetic-token`, and unknown-field preservation. Extend the legacy verifier to decode and re-encode the same public fixtures.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `go test ./proto/schema ./proto/compat -count=1`
 
 Expected: FAIL because `DeviceAuthRspMessage` and enum value 1011 are absent.
 
-- [ ] **Step 3: Add the minimal schema and synthetic fixtures**
+- [x] **Step 3: Add the minimal schema and synthetic fixtures**
 
 Use the exact recovered contract:
 
@@ -67,13 +67,13 @@ message DeviceAuthRspMessage {
 
 Define only the observed `EnumAccountType` zero/default value needed to compile; record that nonzero values remain outside this task. Build fixtures dynamically in the test helper and persist only reviewed synthetic bytes in JSON.
 
-- [ ] **Step 4: Verify GREEN and compatibility**
+- [x] **Step 4: Verify GREEN and compatibility**
 
 Run: `go test ./proto/schema ./proto/compat -count=1`
 
 Expected: PASS, including the PHP verifier when its runtime is available.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit message: `feat(protocol): recover device auth response`
 
