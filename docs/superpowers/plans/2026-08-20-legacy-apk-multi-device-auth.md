@@ -42,7 +42,7 @@
 - Produces `func (f *Fingerprinter) Sum(credential string) Fingerprint` using HMAC-SHA-256 over exact Go string bytes.
 - Produces repository methods used later: `Authorize`, `TouchAuthenticated`, `Add`, `List`, `SetStatus`, and `SetExpiry`.
 
-- [ ] **Step 1: Add the pgx dependency**
+- [x] **Step 1: Add the pgx dependency**
 
 Run:
 
@@ -52,7 +52,7 @@ go get github.com/jackc/pgx/v5@v5.7.6
 
 Expected: `go.mod` and `go.sum` add pgx/v5 without changing the Go language version.
 
-- [ ] **Step 2: Write failing fingerprint tests**
+- [x] **Step 2: Write failing fingerprint tests**
 
 Create table-driven tests with synthetic values that assert:
 
@@ -64,13 +64,13 @@ func TestFingerprinterCopiesPepperInput(t *testing.T)
 
 The exact-byte test must compare against `hmac.New(sha256.New, pepper)` computed independently in the test and must prove that leading space and case changes produce different fingerprints.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run: `go test ./internal/devices -run 'Test(NewFingerprinter|Fingerprinter)' -count=1`
 
 Expected: FAIL because `Fingerprinter` does not exist.
 
-- [ ] **Step 4: Implement the minimal types and fingerprinter**
+- [x] **Step 4: Implement the minimal types and fingerprinter**
 
 Use the following signatures:
 
@@ -82,7 +82,7 @@ func (fingerprint Fingerprint) Bytes() []byte
 
 `Bytes` returns a copy. Errors contain only configuration categories, never secret lengths supplied by a real deployment.
 
-- [ ] **Step 5: Define the repository contract**
+- [x] **Step 5: Define the repository contract**
 
 Use:
 
@@ -107,7 +107,7 @@ type Repository interface {
 
 Define stable sentinels `ErrNotAuthorized`, `ErrAlreadyExists`, `ErrNotFound`, and `ErrInvalidInput`. `Authorize` must collapse unknown, disabled, and expired records to `ErrNotAuthorized`.
 
-- [ ] **Step 6: Verify GREEN and commit**
+- [x] **Step 6: Verify GREEN and commit**
 
 Run:
 
