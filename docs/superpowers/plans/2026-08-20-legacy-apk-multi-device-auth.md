@@ -614,7 +614,7 @@ Record exact command results and only aggregate synthetic counts in `TASK-0006`.
 
 Commit: `feat(deploy): stage multi-device authentication`
 
-- [ ] **Step 7: Deploy a deny-public candidate**
+- [x] **Step 7: Deploy a deny-public candidate**
 
 Build from the reviewed commit, verify local and server SHA-256, and start an isolated candidate with PostgreSQL and registry authentication while the existing gateway remains untouched. Verify health, resource limits, database isolation, secret-file modes, and synthetic auth. Do not query the legacy database yet.
 

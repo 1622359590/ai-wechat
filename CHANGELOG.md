@@ -31,6 +31,7 @@
 - 新增 `deny-all|pairing|device-registry` 显式认证模式、权限受限的 DSN/pepper 文件读取、受限 PostgreSQL 连接池和注册表失败闭合启动流程。
 - 新增 `device-admin` 管理 CLI 和 `device-import` 一次性旧库导入工具，支持隐藏 Credential 输入、全批验证、dry-run、幂等导入及仅聚合输出。
 - 新增分离的网关/管理工具镜像、内部 PostgreSQL 16 网络、迁移启动门控、只读注册表 secret，以及覆盖多设备接管、拒绝、限流和重启的临时容器 smoke。
+- 完成不影响现网端口的远程注册表候选部署，并通过服务器端合成设备生命周期、容器隔离、资源限制、产物哈希和重启验证。
 
 ### 安全
 
