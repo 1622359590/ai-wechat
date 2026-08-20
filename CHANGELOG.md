@@ -30,6 +30,7 @@
 - 新增认证 IP 令牌桶、设备指数退避、未鉴权连接总量/单 IP 准入，以及可配置的 50/5/150 默认连接上限。
 - 新增 `deny-all|pairing|device-registry` 显式认证模式、权限受限的 DSN/pepper 文件读取、受限 PostgreSQL 连接池和注册表失败闭合启动流程。
 - 新增 `device-admin` 管理 CLI 和 `device-import` 一次性旧库导入工具，支持隐藏 Credential 输入、全批验证、dry-run、幂等导入及仅聚合输出。
+- 新增分离的网关/管理工具镜像、内部 PostgreSQL 16 网络、迁移启动门控、只读注册表 secret，以及覆盖多设备接管、拒绝、限流和重启的临时容器 smoke。
 
 ### 安全
 

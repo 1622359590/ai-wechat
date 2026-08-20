@@ -565,7 +565,7 @@ Commit: `feat(devices): add admin and legacy import tools`
 - Compose mounts registry DSN and pepper as read-only files under `/run/secrets`, removes the writable pairing-state mount in registry mode, and keeps gateway non-root/read-only/capability-free.
 - Local smoke provisions a disposable PostgreSQL volume and synthetic registry row without writing its Credential, fingerprint, DSN, or pepper to repository files.
 
-- [ ] **Step 1: Write failing container assertions**
+- [x] **Step 1: Write failing container assertions**
 
 Extend `deploy/smoke.sh` to require:
 
@@ -578,17 +578,17 @@ Extend `deploy/smoke.sh` to require:
 - disabled/expired/unknown devices are rejected identically;
 - the container remains healthy with restart count zero after malformed frames and rate-limit tests.
 
-- [ ] **Step 2: Verify smoke RED**
+- [x] **Step 2: Verify smoke RED**
 
 Run: `./deploy/smoke.sh`
 
 Expected: FAIL because registry containers and binaries are not wired.
 
-- [ ] **Step 3: Implement hardened images and Compose**
+- [x] **Step 3: Implement hardened images and Compose**
 
 Build gateway and tools in separate multi-stage targets. Use PostgreSQL 16 with an internal-only network, persistent named volume for non-test local use, healthcheck, memory limit, and no published database port. Checked-in Compose uses placeholder secret file paths only; real files remain ignored and outside Git.
 
-- [ ] **Step 4: Run full local verification**
+- [x] **Step 4: Run full local verification**
 
 Run:
 
@@ -604,11 +604,11 @@ git diff --check
 
 Expected: every command exits 0.
 
-- [ ] **Step 5: Perform public-repository safety review**
+- [x] **Step 5: Perform public-repository safety review**
 
 Inspect working and staged diffs, ignored files, Docker build contexts, generated binaries, database volumes, secret mounts, migration query files, logs, and known credential patterns. Stop if any real value, database artifact, dump, or payload is tracked.
 
-- [ ] **Step 6: Commit implementation documentation**
+- [x] **Step 6: Commit implementation documentation**
 
 Record exact command results and only aggregate synthetic counts in `TASK-0006`. Update project status and changelog without server paths, device counts from production, identifiers, or secrets.
 

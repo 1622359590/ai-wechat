@@ -1,18 +1,17 @@
 # 部署与容量基线
 
-状态：本机和远程 deny-all staging 已部署；多设备注册表代码已实现、待完成工具与部署验证
+状态：本机多设备注册表 staging 已验证；远程仍为旧 deny-all/单设备候选，尚未切换
 最后更新：2026-08-20
 
 ## 当前可运行部署
 
-Go 协议网关已通过 `deploy/smoke.sh` 部署到本机 Docker，容器名为
-`ai-wechat-staging-gateway-1`。当前部署只用于合成协议和服务存活验证：默认鉴权器拒绝所有设备，不含真实凭证、客户数据、数据库、AI 或公网入口。
+`deploy/smoke.sh` 会创建完全临时的本机 Docker 项目，用随机合成 Credential、随机 pepper 和一次性 PostgreSQL 数据卷执行多设备注册表验证，完成后自动删除容器、网络、数据卷和临时密钥。它不读取真实设备、旧数据库、客户数据或公网入口。
 
-- TCP：`127.0.0.1:19090`
-- 健康检查：`http://127.0.0.1:18080/livez`、`/readyz`
+- TCP/健康检查：smoke 自动选择空闲的本机回环端口，避免影响现有 staging
 - 容器：非 root UID/GID `65532:65532`、只读根文件系统、删除全部 Linux capabilities、启用 `no-new-privileges`
 - 限额：1 CPU、256 MiB 内存、100 PID，默认最大消息体 1 MiB
-- 镜像：scratch 运行时，仅包含静态 `gateway` 二进制
+- 镜像：网关 scratch 运行时只包含 `gateway` 和 CA 根证书；管理/导入二进制只存在于独立 tools 镜像
+- 数据库：PostgreSQL 16 只加入内部 registry 网络，不发布主机端口；迁移成功后网关才启动
 
 本机启动或重建：
 
@@ -20,13 +19,7 @@ Go 协议网关已通过 `deploy/smoke.sh` 部署到本机 Docker，容器名为
 ./deploy/smoke.sh
 ```
 
-本机停止：
-
-```sh
-docker stop ai-wechat-staging-gateway-1
-```
-
-当前 Docker Desktop 缺少可调用的 credential helper；冒烟脚本在这种情况下会创建仅含空 `auths` 的临时客户端配置来拉取公开基础镜像，并在退出时删除，不会读取或覆盖用户 Docker 配置。这不影响生成镜像内容。
+smoke 会自行清理，不需要手动停止。若要长期运行 Compose，先在仓库外创建 PostgreSQL 密码、单行无换行 DSN 和正好 32 字节 pepper 文件，将权限设为 `0600`，再通过 `POSTGRES_PASSWORD_FILE`、`DEVICE_DATABASE_DSN_FILE`、`DEVICE_PEPPER_FILE` 指向它们后执行 `docker compose -f deploy/compose.yaml up -d --build`。不要把真实路径或内容写进 Compose 或仓库。
 
 ## 鉴权模式
 
@@ -64,7 +57,7 @@ docker stop ai-wechat-staging-gateway-1
 | `GATEWAY_DEVICE_DATABASE_DSN_FILE` | 单行 PostgreSQL DSN | 绝对路径、普通文件、非符号链接、权限 `0400` 或 `0600`；不得含 CR/LF/NUL |
 | `GATEWAY_DEVICE_PEPPER_FILE` | 正好 32 字节随机二进制 pepper | 同上；必须建立服务器外加密备份，丢失后现有设备指纹无法查询 |
 
-注册表模式启动时只连接并验证 PostgreSQL，不自动修改数据库结构；迁移必须先由后续的受控管理工具执行。数据库不可用、表未迁移、任一密钥文件缺失或权限不安全时均拒绝启动。网关运行时只依赖新 PostgreSQL 注册表，不读取旧数据库或配对状态文件。
+注册表模式启动时只连接并验证 PostgreSQL，不自动修改数据库结构；Compose 的一次性 `migrate` 容器必须成功退出，网关才会启动。数据库不可用、表未迁移、任一密钥文件缺失或权限不安全时均拒绝启动。网关运行时只依赖新 PostgreSQL 注册表，不读取旧数据库或配对状态文件。`prepare-secrets` 一次性容器将外部文件复制为 UID/GID `65532:65532`、模式 `0400` 的 Docker 卷文件；网关只读挂载该卷。
 
 默认连接保护为：最多 50 个未鉴权连接、每个来源 IP 最多 5 个未鉴权连接、最多 150 个已鉴权设备连接；环境变量分别为 `GATEWAY_MAX_UNAUTHENTICATED_CONNECTIONS`、`GATEWAY_MAX_UNAUTHENTICATED_PER_IP` 和 `GATEWAY_MAX_AUTHENTICATED_CONNECTIONS`，均只接受正整数。
 
@@ -73,6 +66,16 @@ docker stop ai-wechat-staging-gateway-1
 ### 设备管理与一次性导入
 
 `device-admin` 是本地受控命令，支持 `migrate`、`add`、`list`、`enable`、`disable` 和 `set-expiry`。每个子命令都必须显式传入 `--database-dsn-file` 和 `--pepper-file`；`add` 只从标准输入读取一条 Credential，终端输入隐藏，重定向输入必须是唯一一行并以 LF 结束。命令输出只包含内部 UUID、标签、状态和时间，不显示 Credential、指纹或 Token。
+
+Compose 中的 `tools` 服务带 profile，不会常驻启动。受控管理示例：
+
+```sh
+docker compose -f deploy/compose.yaml run --rm tools list \
+  --database-dsn-file /run/secrets/device_database_dsn \
+  --pepper-file /run/secrets/device_pepper
+```
+
+新增设备时不要把 Credential 写进命令行参数；直接运行同一命令的 `add` 子命令并在隐藏提示中输入。
 
 `device-import` 只用于一次性旧库迁移，必须同时提供 `--legacy-dsn-file`、`--database-dsn-file`、`--pepper-file`、`--query-file`，可先加 `--dry-run`。四个文件都必须是权限 `0400`/`0600` 的非符号链接普通文件；私有查询文件最大 64 KiB，且必须只返回 `credential`、`status`、`auth_expires_at` 三个别名。查询文件、旧库表字段、DSN 和真实计数不得进入仓库或日志。
 
