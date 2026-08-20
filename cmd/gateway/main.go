@@ -29,15 +29,18 @@ const (
 )
 
 type config struct {
-	tcpAddress                 string
-	healthAddress              string
-	maxBodyBytes               uint32
-	unauthenticatedReadTimeout time.Duration
-	authenticatedReadTimeout   time.Duration
-	writeTimeout               time.Duration
-	pairingStateFile           string
-	pairingEnrollment          bool
-	pairingAllowedCIDRs        []*net.IPNet
+	tcpAddress                    string
+	healthAddress                 string
+	maxBodyBytes                  uint32
+	unauthenticatedReadTimeout    time.Duration
+	authenticatedReadTimeout      time.Duration
+	writeTimeout                  time.Duration
+	maxUnauthenticatedConnections int
+	maxUnauthenticatedPerIP       int
+	maxAuthenticatedConnections   int
+	pairingStateFile              string
+	pairingEnrollment             bool
+	pairingAllowedCIDRs           []*net.IPNet
 }
 
 func main() {
@@ -72,10 +75,13 @@ func run() error {
 	}
 	handler := gateway.NewHandler(codec, authenticator, gateway.NoopResponder{})
 	service := server.New(server.Config{
-		MaxBodyBytes:               config.maxBodyBytes,
-		UnauthenticatedReadTimeout: config.unauthenticatedReadTimeout,
-		AuthenticatedReadTimeout:   config.authenticatedReadTimeout,
-		WriteTimeout:               config.writeTimeout,
+		MaxBodyBytes:                  config.maxBodyBytes,
+		UnauthenticatedReadTimeout:    config.unauthenticatedReadTimeout,
+		AuthenticatedReadTimeout:      config.authenticatedReadTimeout,
+		WriteTimeout:                  config.writeTimeout,
+		MaxUnauthenticatedConnections: config.maxUnauthenticatedConnections,
+		MaxUnauthenticatedPerIP:       config.maxUnauthenticatedPerIP,
+		MaxAuthenticatedConnections:   config.maxAuthenticatedConnections,
 	}, handler)
 
 	tcpListener, err := net.Listen("tcp", config.tcpAddress)
@@ -125,12 +131,15 @@ func run() error {
 
 func loadConfig(getenv func(string) string) (config, error) {
 	result := config{
-		tcpAddress:                 valueOrDefault(getenv("GATEWAY_TCP_ADDRESS"), ":19090"),
-		healthAddress:              valueOrDefault(getenv("GATEWAY_HEALTH_ADDRESS"), ":18080"),
-		maxBodyBytes:               1024 * 1024,
-		unauthenticatedReadTimeout: 10 * time.Second,
-		authenticatedReadTimeout:   90 * time.Second,
-		writeTimeout:               10 * time.Second,
+		tcpAddress:                    valueOrDefault(getenv("GATEWAY_TCP_ADDRESS"), ":19090"),
+		healthAddress:                 valueOrDefault(getenv("GATEWAY_HEALTH_ADDRESS"), ":18080"),
+		maxBodyBytes:                  1024 * 1024,
+		unauthenticatedReadTimeout:    10 * time.Second,
+		authenticatedReadTimeout:      90 * time.Second,
+		writeTimeout:                  10 * time.Second,
+		maxUnauthenticatedConnections: 50,
+		maxUnauthenticatedPerIP:       5,
+		maxAuthenticatedConnections:   150,
 	}
 	if value := getenv("GATEWAY_MAX_BODY_BYTES"); value != "" {
 		parsed, err := strconv.ParseUint(value, 10, 32)
@@ -138,6 +147,25 @@ func loadConfig(getenv func(string) string) (config, error) {
 			return config{}, fmt.Errorf("GATEWAY_MAX_BODY_BYTES must be between 1 and %d", hardMaxBodyBytes)
 		}
 		result.maxBodyBytes = uint32(parsed)
+	}
+	connectionLimits := []struct {
+		key    string
+		target *int
+	}{
+		{key: "GATEWAY_MAX_UNAUTHENTICATED_CONNECTIONS", target: &result.maxUnauthenticatedConnections},
+		{key: "GATEWAY_MAX_UNAUTHENTICATED_PER_IP", target: &result.maxUnauthenticatedPerIP},
+		{key: "GATEWAY_MAX_AUTHENTICATED_CONNECTIONS", target: &result.maxAuthenticatedConnections},
+	}
+	for _, limit := range connectionLimits {
+		value := getenv(limit.key)
+		if value == "" {
+			continue
+		}
+		parsed, err := strconv.ParseInt(value, 10, strconv.IntSize)
+		if err != nil || parsed < 1 {
+			return config{}, fmt.Errorf("%s must be a positive integer", limit.key)
+		}
+		*limit.target = int(parsed)
 	}
 
 	enabledValue := getenv("GATEWAY_PAIRING_ENABLED")

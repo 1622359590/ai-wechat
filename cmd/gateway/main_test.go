@@ -22,8 +22,42 @@ func TestLoadConfigUsesSafeDefaults(t *testing.T) {
 	if config.unauthenticatedReadTimeout != 10*time.Second || config.authenticatedReadTimeout != 90*time.Second || config.writeTimeout != 10*time.Second {
 		t.Fatalf("default timeouts = %v/%v/%v", config.unauthenticatedReadTimeout, config.authenticatedReadTimeout, config.writeTimeout)
 	}
+	if config.maxUnauthenticatedConnections != 50 || config.maxUnauthenticatedPerIP != 5 || config.maxAuthenticatedConnections != 150 {
+		t.Fatalf("default connection limits = %d/%d/%d, want 50/5/150", config.maxUnauthenticatedConnections, config.maxUnauthenticatedPerIP, config.maxAuthenticatedConnections)
+	}
 	if config.pairingStateFile != "" || config.pairingEnrollment || len(config.pairingAllowedCIDRs) != 0 {
 		t.Fatal("default configuration enabled pairing")
+	}
+}
+
+func TestLoadConfigRejectsInvalidConnectionLimits(t *testing.T) {
+	keys := []string{
+		"GATEWAY_MAX_UNAUTHENTICATED_CONNECTIONS",
+		"GATEWAY_MAX_UNAUTHENTICATED_PER_IP",
+		"GATEWAY_MAX_AUTHENTICATED_CONNECTIONS",
+	}
+	for _, key := range keys {
+		for _, value := range []string{"0", "-1", "invalid", "9223372036854775808"} {
+			t.Run(key+"="+value, func(t *testing.T) {
+				if _, err := loadConfig(mapEnvironment(map[string]string{key: value})); err == nil {
+					t.Fatal("invalid connection limit was accepted")
+				}
+			})
+		}
+	}
+}
+
+func TestLoadConfigAcceptsPositiveConnectionLimits(t *testing.T) {
+	result, err := loadConfig(mapEnvironment(map[string]string{
+		"GATEWAY_MAX_UNAUTHENTICATED_CONNECTIONS": "60",
+		"GATEWAY_MAX_UNAUTHENTICATED_PER_IP":      "6",
+		"GATEWAY_MAX_AUTHENTICATED_CONNECTIONS":   "160",
+	}))
+	if err != nil {
+		t.Fatalf("load connection limits: %v", err)
+	}
+	if result.maxUnauthenticatedConnections != 60 || result.maxUnauthenticatedPerIP != 6 || result.maxAuthenticatedConnections != 160 {
+		t.Fatalf("connection limits = %d/%d/%d, want 60/6/160", result.maxUnauthenticatedConnections, result.maxUnauthenticatedPerIP, result.maxAuthenticatedConnections)
 	}
 }
 

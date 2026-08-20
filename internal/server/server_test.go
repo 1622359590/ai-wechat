@@ -152,6 +152,79 @@ func TestServerClosesCapacityOverflowWithoutEvictingExistingDevice(t *testing.T)
 	assertConnectionClosed(t, first)
 }
 
+func TestServerRejectsExcessUnauthenticatedConnections(t *testing.T) {
+	service := server.New(server.Config{
+		MaxBodyBytes:                  1024,
+		UnauthenticatedReadTimeout:    time.Hour,
+		AuthenticatedReadTimeout:      time.Hour,
+		WriteTimeout:                  time.Second,
+		MaxUnauthenticatedConnections: 1,
+		MaxUnauthenticatedPerIP:       1,
+		MaxAuthenticatedConnections:   1,
+	}, rejectingHandler{})
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() { _ = service.Serve(listener) }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = service.Shutdown(ctx)
+	})
+
+	first, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial first: %v", err)
+	}
+	defer first.Close()
+	second, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial second: %v", err)
+	}
+	defer second.Close()
+	assertConnectionClosed(t, second)
+
+	_ = first.Close()
+	third, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial after release: %v", err)
+	}
+	defer third.Close()
+	assertConnectionOpen(t, third)
+}
+
+func TestServerReleasesUnauthenticatedCapacityAfterLegacyAuthResponse(t *testing.T) {
+	service := server.New(server.Config{
+		MaxBodyBytes:                  1024 * 1024,
+		UnauthenticatedReadTimeout:    time.Hour,
+		AuthenticatedReadTimeout:      time.Hour,
+		WriteTimeout:                  time.Second,
+		MaxUnauthenticatedConnections: 1,
+		MaxUnauthenticatedPerIP:       1,
+		MaxAuthenticatedConnections:   1,
+	}, gateway.NewHandler(serverCodec(t), &acceptAuth{}, gateway.NoopResponder{}))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() { _ = service.Serve(listener) }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = service.Shutdown(ctx)
+	})
+
+	first := authenticateConnection(t, listener.Addr().String())
+	defer first.Close()
+	second, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial after legacy auth: %v", err)
+	}
+	defer second.Close()
+	assertConnectionOpen(t, second)
+}
+
 func startDeviceServer(t *testing.T, authenticator gateway.Authenticator, max int) (*server.Server, net.Listener) {
 	t.Helper()
 	service := server.New(server.Config{

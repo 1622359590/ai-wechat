@@ -376,11 +376,11 @@ Commit: `feat(gateway): manage multi-device connections`
 - Produces `server.NewAdmission(maxUnauthenticated int, maxPerIP int) *Admission` with `Acquire(net.IP) (release func(), error)`.
 - Adds gateway config keys `GATEWAY_MAX_UNAUTHENTICATED_CONNECTIONS`, `GATEWAY_MAX_UNAUTHENTICATED_PER_IP`, and `GATEWAY_MAX_AUTHENTICATED_CONNECTIONS` with defaults 50, 5, and 150.
 
-- [ ] **Step 1: Write failing auth-limiter tests**
+- [x] **Step 1: Write failing auth-limiter tests**
 
 Use a fake clock. Assert initial burst 5, refill rate 20/minute, IP isolation, keyed 16-byte in-memory Credential identifiers, exponential failure delays capped at 15 minutes, success reset, stale-entry cleanup, and no raw IP/fingerprint in exposed state.
 
-- [ ] **Step 2: Verify RED, implement, and verify GREEN**
+- [x] **Step 2: Verify RED, implement, and verify GREEN**
 
 Run RED then GREEN:
 
@@ -390,11 +390,11 @@ go test ./internal/ratelimit -race -count=1
 
 Use a mutex-protected token bucket and backoff map. Never use `time.Sleep`; all decisions use the injected clock.
 
-- [ ] **Step 3: Write failing admission tests**
+- [x] **Step 3: Write failing admission tests**
 
 Cover total unauthenticated capacity, per-IP capacity, nil/unparseable IP rejection, release idempotence, concurrent acquire/release, and IPv4-mapped IPv6 canonicalization.
 
-- [ ] **Step 4: Verify RED, implement, and wire the server**
+- [x] **Step 4: Verify RED, implement, and wire the server**
 
 Run RED then GREEN:
 
@@ -404,7 +404,7 @@ go test ./internal/server -run 'TestAdmission|TestServerRejectsExcessUnauthentic
 
 Acquire immediately after `Accept`; reject without starting a goroutine when capacity is unavailable. Release the unauthenticated lease once an authentication response is written successfully, including rollback pairing mode without an internal device ID, or when the connection closes.
 
-- [ ] **Step 5: Add failing config tests and wire limits**
+- [x] **Step 5: Add failing config tests and wire limits**
 
 Test defaults, zero, negative, malformed, overflow, and authenticated capacity smaller than one. Pass authenticated capacity to the device connection directory and the other two values to `Admission`.
 
@@ -412,7 +412,7 @@ Run: `go test ./cmd/gateway ./internal/deviceauth ./internal/ratelimit ./interna
 
 Expected: PASS after implementation.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit: `feat(gateway): limit device authentication abuse`
 

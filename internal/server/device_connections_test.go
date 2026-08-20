@@ -165,7 +165,7 @@ func TestServerDoesNotActivateDeviceBeforeAuthResponseWriteSucceeds(t *testing.T
 	done := make(chan struct{})
 	service.wait.Add(1)
 	go func() {
-		service.serveConnection(connection)
+		service.serveConnection(connection, func() {})
 		close(done)
 	}()
 
