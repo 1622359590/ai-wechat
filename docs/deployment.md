@@ -70,6 +70,14 @@ docker stop ai-wechat-staging-gateway-1
 
 设备 Credential 仅在请求处理中用于计算 `HMAC-SHA-256`，数据库只存 32 字节指纹。认证尝试还受每 IP 令牌桶和每设备指数退避限制；停用或修改设备后，PostgreSQL 管理事件会关闭该设备当前连接，监听器断线后按事件游标补偿。
 
+### 设备管理与一次性导入
+
+`device-admin` 是本地受控命令，支持 `migrate`、`add`、`list`、`enable`、`disable` 和 `set-expiry`。每个子命令都必须显式传入 `--database-dsn-file` 和 `--pepper-file`；`add` 只从标准输入读取一条 Credential，终端输入隐藏，重定向输入必须是唯一一行并以 LF 结束。命令输出只包含内部 UUID、标签、状态和时间，不显示 Credential、指纹或 Token。
+
+`device-import` 只用于一次性旧库迁移，必须同时提供 `--legacy-dsn-file`、`--database-dsn-file`、`--pepper-file`、`--query-file`，可先加 `--dry-run`。四个文件都必须是权限 `0400`/`0600` 的非符号链接普通文件；私有查询文件最大 64 KiB，且必须只返回 `credential`、`status`、`auth_expires_at` 三个别名。查询文件、旧库表字段、DSN 和真实计数不得进入仓库或日志。
+
+导入器用只读、单连接、带超时的 MySQL 事务读取并验证完整批次，随后才打开新库写事务。任一无效记录会使本批次零写入；重复指纹只计数，不修改新库中已有设备的状态、到期时间或标签。输出只有 `total/imported/duplicates/rejected/dry_run` 聚合值。迁移验证完成后，应从运行环境移除旧库 DSN 和私有查询文件。
+
 ## 远程 staging
 
 2026-08-20 已通过宝塔面板在一台 Alibaba Cloud Linux 3、x86-64 测试服务器上更新候选部署。公开仓库不记录服务器 IP、面板入口、来源地址或凭据。

@@ -60,6 +60,95 @@ func TestRepositoryAuthorize(t *testing.T) {
 	}
 }
 
+func TestRepositoryLegacyImportIsIdempotentAndPreservesExistingDevices(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate(): %v", err)
+	}
+	repository := NewRepository(pool)
+	now := time.Date(2026, 8, 20, 15, 0, 0, 0, time.UTC)
+	expires := now.Add(24 * time.Hour)
+	records := []ImportRecord{
+		{Fingerprint: testFingerprint(71), Status: devices.StatusActive, AuthExpiresAt: &expires},
+		{Fingerprint: testFingerprint(72), Status: devices.StatusDisabled},
+	}
+	summary, err := repository.ImportDevices(ctx, records, now)
+	if err != nil {
+		t.Fatalf("Import(): %v", err)
+	}
+	if summary.Imported != 2 || summary.Duplicates != 0 {
+		t.Fatalf("first import summary = %#v", summary)
+	}
+	if _, err := repository.Authorize(ctx, testFingerprint(71), now); err != nil {
+		t.Fatalf("authorize imported active device: %v", err)
+	}
+	if _, err := repository.Authorize(ctx, testFingerprint(72), now); !errors.Is(err, devices.ErrNotAuthorized) {
+		t.Fatalf("authorize imported disabled device: %v", err)
+	}
+
+	replacementExpiry := now.Add(48 * time.Hour)
+	summary, err = repository.ImportDevices(ctx, []ImportRecord{{
+		Fingerprint: testFingerprint(71), Status: devices.StatusDisabled, AuthExpiresAt: &replacementExpiry,
+	}}, now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("duplicate Import(): %v", err)
+	}
+	if summary.Imported != 0 || summary.Duplicates != 1 {
+		t.Fatalf("duplicate import summary = %#v", summary)
+	}
+	device, err := repository.Authorize(ctx, testFingerprint(71), now)
+	if err != nil {
+		t.Fatalf("duplicate import changed active status: %v", err)
+	}
+	if device.AuthExpiresAt == nil || !device.AuthExpiresAt.Equal(expires) {
+		t.Fatalf("duplicate import changed expiry to %v", device.AuthExpiresAt)
+	}
+
+	var migrationEvents int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM device_admin_events
+		WHERE actor_type = 'migration' AND reason_code = 'legacy_import'`).Scan(&migrationEvents); err != nil {
+		t.Fatalf("count migration events: %v", err)
+	}
+	if migrationEvents != 2 {
+		t.Fatalf("migration event count = %d, want 2", migrationEvents)
+	}
+}
+
+func TestRepositoryLegacyImportPreviewAndInvalidBatchAreReadOnly(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate(): %v", err)
+	}
+	repository := NewRepository(pool)
+	now := time.Date(2026, 8, 20, 16, 0, 0, 0, time.UTC)
+	if _, err := repository.ImportDevices(ctx, []ImportRecord{{Fingerprint: testFingerprint(73), Status: devices.StatusActive}}, now); err != nil {
+		t.Fatalf("seed Import(): %v", err)
+	}
+	preview, err := repository.PreviewImport(ctx, []ImportRecord{
+		{Fingerprint: testFingerprint(73), Status: devices.StatusActive},
+		{Fingerprint: testFingerprint(74), Status: devices.StatusDisabled},
+		{Fingerprint: testFingerprint(74), Status: devices.StatusDisabled},
+	})
+	if err != nil || preview.Imported != 1 || preview.Duplicates != 2 {
+		t.Fatalf("Preview() = %#v, error %v", preview, err)
+	}
+	if _, err := repository.Authorize(ctx, testFingerprint(74), now); !errors.Is(err, devices.ErrNotAuthorized) {
+		t.Fatal("Preview() wrote a device")
+	}
+	_, err = repository.ImportDevices(ctx, []ImportRecord{
+		{Fingerprint: testFingerprint(75), Status: devices.StatusActive},
+		{Fingerprint: testFingerprint(76), Status: devices.Status("invalid")},
+	}, now)
+	if !errors.Is(err, devices.ErrInvalidInput) {
+		t.Fatalf("invalid Import() error = %v, want ErrInvalidInput", err)
+	}
+	if _, err := repository.Authorize(ctx, testFingerprint(75), now); !errors.Is(err, devices.ErrNotAuthorized) {
+		t.Fatal("invalid batch partially wrote a device")
+	}
+}
+
 func TestOpenUsesBoundedPoolSettings(t *testing.T) {
 	ctx := context.Background()
 	pool, err := Open(ctx, testDSN(t))

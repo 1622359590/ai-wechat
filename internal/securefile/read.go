@@ -45,6 +45,20 @@ func ReadText(path string, maximumBytes int) (string, error) {
 	return string(contents), nil
 }
 
+func ReadBytes(path string, maximumBytes int) ([]byte, error) {
+	if maximumBytes <= 0 {
+		return nil, errInvalidContent
+	}
+	contents, err := readPrivateRegularFile(path, maximumBytes)
+	if err != nil {
+		return nil, err
+	}
+	if len(contents) == 0 {
+		return nil, errInvalidContent
+	}
+	return append([]byte(nil), contents...), nil
+}
+
 func readPrivateRegularFile(path string, maximumBytes int) ([]byte, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, errInvalidPath

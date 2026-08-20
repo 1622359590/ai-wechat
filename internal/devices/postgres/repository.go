@@ -150,6 +150,94 @@ func (repository *Repository) SetExpiry(ctx context.Context, id devices.ID, expi
 		"UPDATE devices SET auth_expires_at = $2, updated_at = $3 WHERE id = $1 RETURNING id", expiresAt)
 }
 
+type ImportRecord struct {
+	Fingerprint   devices.Fingerprint
+	Status        devices.Status
+	AuthExpiresAt *time.Time
+}
+
+type ImportSummary struct {
+	Total      int
+	Imported   int
+	Duplicates int
+}
+
+func (repository *Repository) PreviewImport(ctx context.Context, records []ImportRecord) (ImportSummary, error) {
+	summary := ImportSummary{Total: len(records)}
+	if !validImportRecords(records) {
+		return summary, devices.ErrInvalidInput
+	}
+	tx, err := repository.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return summary, databaseError(ctx, "begin device import preview")
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	seen := make(map[devices.Fingerprint]struct{}, len(records))
+	for _, record := range records {
+		if _, duplicate := seen[record.Fingerprint]; duplicate {
+			summary.Duplicates++
+			continue
+		}
+		seen[record.Fingerprint] = struct{}{}
+		var exists bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM devices WHERE credential_fingerprint = $1)", record.Fingerprint.Bytes()).Scan(&exists); err != nil {
+			return summary, databaseError(ctx, "preview device import")
+		}
+		if exists {
+			summary.Duplicates++
+		} else {
+			summary.Imported++
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return summary, databaseError(ctx, "complete device import preview")
+	}
+	return summary, nil
+}
+
+func (repository *Repository) ImportDevices(ctx context.Context, records []ImportRecord, at time.Time) (ImportSummary, error) {
+	summary := ImportSummary{Total: len(records)}
+	if !validImportRecords(records) {
+		return summary, devices.ErrInvalidInput
+	}
+	tx, err := repository.pool.Begin(ctx)
+	if err != nil {
+		return summary, databaseError(ctx, "begin device import")
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	for _, record := range records {
+		var deviceID devices.ID
+		err := tx.QueryRow(ctx, `INSERT INTO devices (tenant_id, credential_fingerprint, status, auth_expires_at)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (credential_fingerprint) DO NOTHING
+			RETURNING id::text`, devices.DefaultTenantID, record.Fingerprint.Bytes(), record.Status, record.AuthExpiresAt).Scan(&deviceID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			summary.Duplicates++
+			continue
+		}
+		if err != nil {
+			return summary, databaseError(ctx, "insert imported device")
+		}
+		if err := insertAdminEvent(ctx, tx, deviceID, "created", "migration", "legacy_import", at); err != nil {
+			return summary, err
+		}
+		summary.Imported++
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return summary, databaseError(ctx, "commit device import")
+	}
+	return summary, nil
+}
+
+func validImportRecords(records []ImportRecord) bool {
+	for _, record := range records {
+		if !validStatus(record.Status) {
+			return false
+		}
+	}
+	return true
+}
+
 func (repository *Repository) adminUpdate(ctx context.Context, id devices.ID, action, reason string, at time.Time, query string, value any) error {
 	tx, err := repository.pool.Begin(ctx)
 	if err != nil {

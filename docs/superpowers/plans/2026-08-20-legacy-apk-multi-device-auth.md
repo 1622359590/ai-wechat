@@ -494,7 +494,7 @@ Commit: `feat(gateway): configure device registry auth`
 - The private query must return exactly aliases `credential`, `status`, and `auth_expires_at`; `status` must already be normalized to `active` or `disabled`.
 - Produces `legacyimport.Target.Import(ctx context.Context, records []legacyimport.Record, now time.Time) (legacyimport.Summary, error)`; imported records use `devices.DefaultTenantID`, add audit action `created` with actor `migration` and reason `legacy_import`, insert only absent fingerprints, and report existing fingerprints as duplicates without updating them.
 
-- [ ] **Step 1: Add tool-only dependencies**
+- [x] **Step 1: Add tool-only dependencies**
 
 Run:
 
@@ -505,43 +505,44 @@ go get golang.org/x/term@v0.33.0
 
 Expected: dependencies are available to tool packages; the `cmd/gateway` binary import graph contains no MySQL driver.
 
-- [ ] **Step 2: Write failing device-admin service tests**
+- [x] **Step 2: Write failing device-admin service tests**
 
 Test synthetic add/list/enable/disable/set-expiry operations against a fake repository. Assert fixed actor/reason codes, limit 1000 for list, RFC3339 expiry parsing, `never` mapping to null, and no Credential/fingerprint in returned values or errors.
 
-- [ ] **Step 3: Verify RED, implement service, and verify GREEN**
+- [x] **Step 3: Verify RED, implement service, and verify GREEN**
 
 Run RED then GREEN: `go test ./internal/deviceadmin -count=1`
 
-- [ ] **Step 4: Write failing CLI tests and implement `device-admin`**
+- [x] **Step 4: Write failing CLI tests and implement `device-admin`**
 
 Inject stdin/stdout/stderr and repository construction into `run`. Tests cover every subcommand, missing flags, unsafe secret files, empty/multiple-line Credential input, exit codes, and sanitized output. `list` prints internal UUID, label, status, expiry, and last-authenticated time only.
 
 Run RED then GREEN: `go test ./cmd/device-admin -count=1`
 
-- [ ] **Step 5: Write failing legacy importer tests**
+- [x] **Step 5: Write failing legacy importer tests**
 
 Use `database/sql/driver` test doubles with synthetic rows. Cover dry-run counts, normal import, duplicate import idempotence, disabled-record preservation, new-database disabled state never re-enabled, invalid status/time/empty Credential causing an all-or-nothing rollback and nonzero completion, context cancellation, and output containing aggregate counts only.
 
-- [ ] **Step 6: Implement importer security boundaries**
+- [x] **Step 6: Implement importer security boundaries**
 
 Require all four input files to be regular non-symlink files with mode `0400` or `0600`. Limit query file size to 64 KiB. Open MySQL with `readTimeout=10s`, `writeTimeout=10s`, `timeout=5s`, `parseTime=true`, and a one-connection pool. Begin a read-only transaction, execute the private query, HMAC each Credential immediately, clear its byte slice after use, and validate all records before opening the PostgreSQL import transaction. If any row is rejected, write nothing. The PostgreSQL target inserts missing fingerprints and treats every conflict as a no-op duplicate; import never modifies an existing device's status, expiry, or label.
 
 The importer never prints a row number, source primary key, Credential, fingerprint, label, query, table, DSN, or rejected value.
 
-- [ ] **Step 7: Verify RED/GREEN and binary dependency isolation**
+- [x] **Step 7: Verify RED/GREEN and binary dependency isolation**
 
 Run:
 
 ```sh
 go test ./internal/legacyimport ./cmd/device-import -count=1
-go list -deps ./cmd/gateway | rg 'go-sql-driver/mysql' && exit 1 || true
+go list -deps ./cmd/gateway | rg 'go-sql-driver/mysql|internal/legacyimport' && exit 1 || true
 go list -deps ./cmd/device-import | rg -q 'go-sql-driver/mysql'
+go list -deps ./cmd/device-import | rg -q 'internal/legacyimport/postgrestarget'
 ```
 
-Expected: tests PASS; MySQL is absent from gateway dependencies and present in importer dependencies.
+Expected: tests PASS; MySQL and the legacy import package are absent from gateway dependencies, while MySQL and the PostgreSQL import adapter are present in importer dependencies.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 Commit: `feat(devices): add admin and legacy import tools`
 
