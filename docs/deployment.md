@@ -52,20 +52,20 @@ docker stop ai-wechat-staging-gateway-1
 
 ## 远程 staging
 
-2026-08-19 已通过宝塔面板在一台 Alibaba Cloud Linux 3、x86-64 测试服务器上完成部署。公开仓库不记录服务器 IP、面板入口或凭据。
+2026-08-20 已通过宝塔面板在一台 Alibaba Cloud Linux 3、x86-64 测试服务器上更新候选部署。公开仓库不记录服务器 IP、面板入口、来源地址或凭据。
 
 - 部署目录：`/opt/ai-wechat-gateway`
-- 镜像：`ai-wechat-gateway:443432e`
+- 镜像：与提交 `ac1bca6` 对应的远程候选镜像
 - 运行方式：宝塔 Docker Compose 项目 `ai-wechat-gateway`
-- TCP：远程主机 `127.0.0.1:19090`
+- TCP：配对测试期间由主机防火墙限制为单一现场来源；完成测试后必须重新收口
 - 健康检查：远程主机 `127.0.0.1:18080`
 - 限额：1 CPU、256 MiB、100 PID
 - 安全：UID/GID `65532:65532`、只读根文件系统、`cap_drop: ALL`、`no-new-privileges`
-- 产物：Linux AMD64 静态二进制，SHA-256 `ed33670c9abe908856f5f10a99435147e2870d05fcd4bfb4a240cbb2d41ab95d`
+- 产物：Linux AMD64 静态二进制，SHA-256 `cf7d9a687b9ff31510cc9f63a6cc3804dbcb42d629d451f3e6c9a1f8aeeffadd`
 
 服务器端实际验证结果：容器 `running` 且 `healthy`，重启次数为 0；`/livez`、`/readyz` 均返回 200；异常 TCP 帧后仍为 `healthy` 且无重启；`ss` 确认 18080/19090 仅监听 `127.0.0.1`。空载采样约使用 2.1 MiB 容器内存、5 个 PID 和接近 0% CPU；该数字只代表无设备连接的存活基线，不是容量结论。
 
-远程环境当前只用于服务存活和协议安全验证。开放设备连接前必须完成真实鉴权适配、TLS 或受控专网入口、防火墙白名单、面板 HTTPS、面板凭据轮换和系统安全更新评估。
+远程环境当前只用于单设备 staging。真实鉴权适配与临时单来源防火墙限制已部署，但首次配对尚未发生；TLS 或受控专网入口、持久化防火墙规则、面板 HTTPS、面板凭据轮换和系统安全更新评估仍未完成。
 
 ## 容量驱动因素
 

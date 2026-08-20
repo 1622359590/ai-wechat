@@ -161,7 +161,7 @@ Run RED then GREEN: `go test ./internal/gateway ./internal/server -race -count=1
 
 The handler sets authenticated state only after `EncodeDeviceAuth` succeeds. Token comparison uses `subtle.ConstantTimeCompare`; the server creates the Session from `connection.RemoteAddr()` without logging it.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit message: `feat(gateway): complete device authentication handshake`
 
@@ -235,7 +235,7 @@ Record exact automated results and clarify that one staging device can pair whil
 
 Commit message: `docs: record secure pairing implementation`
 
-- [ ] **Step 4: Build and deploy deny-all candidate**
+- [x] **Step 4: Build and deploy deny-all candidate**
 
 Cross-compile Linux AMD64, verify SHA-256 locally and remotely, replace only the isolated gateway container, and confirm running/healthy/restart=0 before pairing is enabled.
 
