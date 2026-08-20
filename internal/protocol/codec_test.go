@@ -27,7 +27,7 @@ type fixture struct {
 func TestDecodeReplaysAllSyntheticFixtures(t *testing.T) {
 	codec := newCodec(t)
 	fixtures := readFixtures(t)
-	if got, want := len(fixtures), 15; got != want {
+	if got, want := len(fixtures), 18; got != want {
 		t.Fatalf("fixture count = %d, want %d", got, want)
 	}
 

@@ -5,11 +5,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync/atomic"
+	"time"
 
 	"github.com/1622359590/ai-wechat/internal/protocol"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
+
+type AuthRequest struct {
+	AuthType   int32
+	Credential string
+	PeerIP     net.IP
+}
+
+type AuthResult struct {
+	AccessToken string
+	ExpiresAt   time.Time
+}
 
 var (
 	ErrAuthenticationRequired = errors.New("authentication is required")

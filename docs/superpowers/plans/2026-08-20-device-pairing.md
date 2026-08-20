@@ -90,31 +90,31 @@ Commit message: `feat(protocol): recover device auth response`
 - Produces: `pairing.New(Config) (*Authenticator, error)` and `Authenticate(context.Context, gateway.AuthRequest) (gateway.AuthResult, error)`.
 - `pairing.Config` fields: `StateFile string`, `Enrollment bool`, `AllowedCIDRs []*net.IPNet`, `Now func() time.Time`, `Random io.Reader`.
 
-- [ ] **Step 1: Write failing store tests**
+- [x] **Step 1: Write failing store tests**
 
 Test real temporary directories. Assert first creation succeeds, a concurrent second different fingerprint cannot overwrite, reload returns the first fingerprint, the file mode is `0600`, and file bytes do not contain the synthetic Credential.
 
-- [ ] **Step 2: Verify store tests RED**
+- [x] **Step 2: Verify store tests RED**
 
 Run: `go test ./internal/pairing -run TestStore -count=1`
 
 Expected: FAIL because the package does not exist.
 
-- [ ] **Step 3: Implement the minimal atomic store**
+- [x] **Step 3: Implement the minimal atomic store**
 
 Write versioned JSON to an exclusive temporary file, `Sync`, close, and atomically publish without replacing an existing state. Treat malformed state or unsafe permissions as an error.
 
-- [ ] **Step 4: Write failing authenticator tests**
+- [x] **Step 4: Write failing authenticator tests**
 
 Use literal synthetic credentials and loopback documentation ranges. Cover deny-all without state, invalid auth type, empty/oversized Credential, enrollment source rejection, first enrollment, same-device reload, different-device rejection, and 32-byte random Token encoded as 64 lowercase hex characters.
 
-- [ ] **Step 5: Verify authenticator tests RED**
+- [x] **Step 5: Verify authenticator tests RED**
 
 Run: `go test ./internal/pairing -run TestAuthenticator -count=1`
 
 Expected: FAIL because the authenticator is absent.
 
-- [ ] **Step 6: Implement and verify GREEN**
+- [x] **Step 6: Implement and verify GREEN**
 
 Hash Credential with SHA-256 only inside the authenticator, compare with `subtle.ConstantTimeCompare`, never format the Credential or fingerprint into errors, and use stable error categories.
 
@@ -122,7 +122,7 @@ Run: `go test ./internal/pairing -race -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Commit message: `feat(gateway): add one-device pairing authenticator`
 

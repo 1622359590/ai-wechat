@@ -63,10 +63,11 @@ func NewCodec(files *protoregistry.Files) (*Codec, error) {
 		return nil, err
 	}
 
-	bindings := make(map[int32]messageBinding, 4)
+	bindings := make(map[int32]messageBinding, 5)
 	for msgType, name := range map[int32]string{
 		1001: "HeartBeatMessage",
 		1010: "DeviceAuthReqMessage",
+		1011: "DeviceAuthRspMessage",
 		1024: "FriendTalkNoticeMessage",
 		1070: "TalkToFriendTaskMessage",
 	} {
