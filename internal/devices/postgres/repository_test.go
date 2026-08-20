@@ -60,6 +60,22 @@ func TestRepositoryAuthorize(t *testing.T) {
 	}
 }
 
+func TestOpenUsesBoundedPoolSettings(t *testing.T) {
+	ctx := context.Background()
+	pool, err := Open(ctx, testDSN(t))
+	if err != nil {
+		t.Fatalf("Open(): %v", err)
+	}
+	defer pool.Close()
+	config := pool.Config()
+	if config.MaxConns != 10 || config.MinConns != 1 {
+		t.Fatalf("pool connections = max %d/min %d, want 10/1", config.MaxConns, config.MinConns)
+	}
+	if config.MaxConnLifetime != 30*time.Minute || config.MaxConnIdleTime != 5*time.Minute {
+		t.Fatalf("pool durations = lifetime %v/idle %v", config.MaxConnLifetime, config.MaxConnIdleTime)
+	}
+}
+
 func TestRepositoryAddDuplicateAndListValidation(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()

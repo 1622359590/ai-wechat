@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log"
@@ -15,12 +16,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/1622359590/ai-wechat/internal/deviceauth"
+	"github.com/1622359590/ai-wechat/internal/devices"
+	devicepostgres "github.com/1622359590/ai-wechat/internal/devices/postgres"
 	"github.com/1622359590/ai-wechat/internal/gateway"
 	"github.com/1622359590/ai-wechat/internal/health"
 	"github.com/1622359590/ai-wechat/internal/pairing"
 	"github.com/1622359590/ai-wechat/internal/protocol"
+	"github.com/1622359590/ai-wechat/internal/ratelimit"
+	"github.com/1622359590/ai-wechat/internal/securefile"
 	"github.com/1622359590/ai-wechat/internal/server"
 	"github.com/1622359590/ai-wechat/proto/schema"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -38,9 +45,25 @@ type config struct {
 	maxUnauthenticatedConnections int
 	maxUnauthenticatedPerIP       int
 	maxAuthenticatedConnections   int
+	authMode                      string
+	deviceDatabaseDSNFile         string
+	devicePepperFile              string
 	pairingStateFile              string
 	pairingEnrollment             bool
 	pairingAllowedCIDRs           []*net.IPNet
+}
+
+type authenticationRuntime struct {
+	authenticator gateway.Authenticator
+	mode          string
+	registryDSN   string
+	pool          *pgxpool.Pool
+}
+
+func (runtime *authenticationRuntime) Close() {
+	if runtime != nil && runtime.pool != nil {
+		runtime.pool.Close()
+	}
 }
 
 func main() {
@@ -69,11 +92,16 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create protocol codec: %w", err)
 	}
-	authenticator, authMode, err := configuredAuthenticator(config)
+	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	startupContext, cancelStartup := context.WithTimeout(signalContext, 5*time.Second)
+	authentication, err := configureAuthentication(startupContext, config)
+	cancelStartup()
 	if err != nil {
 		return err
 	}
-	handler := gateway.NewHandler(codec, authenticator, gateway.NoopResponder{})
+	defer authentication.Close()
+	handler := gateway.NewHandler(codec, authentication.authenticator, gateway.NoopResponder{})
 	service := server.New(server.Config{
 		MaxBodyBytes:                  config.maxBodyBytes,
 		UnauthenticatedReadTimeout:    config.unauthenticatedReadTimeout,
@@ -83,6 +111,16 @@ func run() error {
 		MaxUnauthenticatedPerIP:       config.maxUnauthenticatedPerIP,
 		MaxAuthenticatedConnections:   config.maxAuthenticatedConnections,
 	}, handler)
+	var adminListener *devicepostgres.AdminEventListener
+	if authentication.registryDSN != "" {
+		listenerContext, cancelListenerStartup := context.WithTimeout(signalContext, 5*time.Second)
+		adminListener, err = devicepostgres.NewAdminEventListener(listenerContext, authentication.registryDSN, service.DisconnectDevice)
+		cancelListenerStartup()
+		if err != nil {
+			return errors.New("configure device admin event listener failed")
+		}
+		defer adminListener.Close()
+	}
 
 	tcpListener, err := net.Listen("tcp", config.tcpAddress)
 	if err != nil {
@@ -97,7 +135,7 @@ func run() error {
 		IdleTimeout:       30 * time.Second,
 	}
 
-	errorsChannel := make(chan error, 2)
+	errorsChannel := make(chan error, 3)
 	go func() { errorsChannel <- service.Serve(tcpListener) }()
 	go func() {
 		err := healthServer.ListenAndServe()
@@ -106,17 +144,20 @@ func run() error {
 		}
 		errorsChannel <- err
 	}()
-	log.Printf("gateway started tcp=%s health=%s auth=%s", config.tcpAddress, config.healthAddress, authMode)
+	if adminListener != nil {
+		go func() { errorsChannel <- adminListener.Run(signalContext) }()
+	}
+	log.Print(startupMessage(config, authentication.mode))
 
-	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	var runError error
 	select {
 	case <-signalContext.Done():
 	case err := <-errorsChannel:
 		if err != nil {
-			return err
+			runError = err
 		}
 	}
+	stop()
 
 	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -126,7 +167,7 @@ func run() error {
 	if err := service.Shutdown(shutdownContext); err != nil {
 		return fmt.Errorf("shutdown TCP server: %w", err)
 	}
-	return nil
+	return runError
 }
 
 func loadConfig(getenv func(string) string) (config, error) {
@@ -140,6 +181,7 @@ func loadConfig(getenv func(string) string) (config, error) {
 		maxUnauthenticatedConnections: 50,
 		maxUnauthenticatedPerIP:       5,
 		maxAuthenticatedConnections:   150,
+		authMode:                      "deny-all",
 	}
 	if value := getenv("GATEWAY_MAX_BODY_BYTES"); value != "" {
 		parsed, err := strconv.ParseUint(value, 10, 32)
@@ -168,6 +210,11 @@ func loadConfig(getenv func(string) string) (config, error) {
 		*limit.target = int(parsed)
 	}
 
+	if value := getenv("GATEWAY_AUTH_MODE"); value != "" {
+		result.authMode = value
+	}
+	result.deviceDatabaseDSNFile = getenv("GATEWAY_DEVICE_DATABASE_DSN_FILE")
+	result.devicePepperFile = getenv("GATEWAY_DEVICE_PEPPER_FILE")
 	enabledValue := getenv("GATEWAY_PAIRING_ENABLED")
 	if enabledValue != "" {
 		parsed, err := strconv.ParseBool(enabledValue)
@@ -178,13 +225,34 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	result.pairingStateFile = getenv("GATEWAY_PAIRING_STATE_FILE")
 	allowedCIDRsValue := getenv("GATEWAY_PAIRING_ALLOWED_CIDRS")
+	pairingConfigured := enabledValue != "" || result.pairingStateFile != "" || allowedCIDRsValue != ""
+	registryConfigured := result.deviceDatabaseDSNFile != "" || result.devicePepperFile != ""
 
-	if result.pairingStateFile == "" {
-		if result.pairingEnrollment || allowedCIDRsValue != "" {
-			return config{}, errors.New("pairing enrollment requires GATEWAY_PAIRING_STATE_FILE and GATEWAY_PAIRING_ALLOWED_CIDRS")
+	switch result.authMode {
+	case "deny-all":
+		if pairingConfigured || registryConfigured {
+			return config{}, errors.New("deny-all mode cannot include pairing or device registry settings")
 		}
 		return result, nil
+	case "pairing":
+		if registryConfigured {
+			return config{}, errors.New("pairing mode cannot include device registry settings")
+		}
+		if result.pairingStateFile == "" {
+			return config{}, errors.New("pairing mode requires GATEWAY_PAIRING_STATE_FILE")
+		}
+	case "device-registry":
+		if pairingConfigured {
+			return config{}, errors.New("device registry mode cannot include pairing settings")
+		}
+		if result.deviceDatabaseDSNFile == "" || result.devicePepperFile == "" {
+			return config{}, errors.New("device registry mode requires both secret files")
+		}
+		return result, nil
+	default:
+		return config{}, errors.New("GATEWAY_AUTH_MODE is invalid")
 	}
+
 	if err := validatePairingStatePath(result.pairingStateFile); err != nil {
 		return config{}, err
 	}
@@ -222,23 +290,67 @@ func validatePairingStatePath(stateFile string) error {
 	return nil
 }
 
-func configuredAuthenticator(config config) (gateway.Authenticator, string, error) {
-	if config.pairingStateFile == "" {
-		return gateway.DenyAllAuthenticator{}, "deny-all", nil
+func configureAuthentication(ctx context.Context, config config) (*authenticationRuntime, error) {
+	switch config.authMode {
+	case "deny-all":
+		return &authenticationRuntime{authenticator: gateway.DenyAllAuthenticator{}, mode: "deny-all"}, nil
+	case "pairing":
+		authenticator, err := pairing.New(pairing.Config{
+			StateFile:    config.pairingStateFile,
+			Enrollment:   config.pairingEnrollment,
+			AllowedCIDRs: config.pairingAllowedCIDRs,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("configure device pairing: %w", err)
+		}
+		return &authenticationRuntime{authenticator: authenticator, mode: "pairing"}, nil
+	case "device-registry":
+		dsn, err := securefile.ReadText(config.deviceDatabaseDSNFile, 16*1024)
+		if err != nil {
+			return nil, errors.New("read device registry configuration failed")
+		}
+		pepper, err := securefile.ReadExact(config.devicePepperFile, 32)
+		if err != nil {
+			return nil, errors.New("read device fingerprint configuration failed")
+		}
+		fingerprinter, err := devices.NewFingerprinter(pepper)
+		clear(pepper)
+		if err != nil {
+			return nil, errors.New("configure device fingerprinting failed")
+		}
+		pool, err := devicepostgres.Open(ctx, dsn)
+		if err != nil {
+			return nil, errors.New("connect device registry failed")
+		}
+		limiterKey := make([]byte, 32)
+		if _, err := rand.Read(limiterKey); err != nil {
+			pool.Close()
+			return nil, errors.New("initialize authentication limiter failed")
+		}
+		limiter, err := ratelimit.NewAuth(ratelimit.Config{
+			AttemptsPerMinute: 20,
+			Burst:             5,
+			MaximumBackoff:    15 * time.Minute,
+			Key:               limiterKey,
+		})
+		clear(limiterKey)
+		if err != nil {
+			pool.Close()
+			return nil, errors.New("configure authentication limiter failed")
+		}
+		authenticator, err := deviceauth.New(devicepostgres.NewRepository(pool), fingerprinter, limiter, nil, nil)
+		if err != nil {
+			pool.Close()
+			return nil, errors.New("configure device authentication failed")
+		}
+		return &authenticationRuntime{authenticator: authenticator, mode: "device-registry", registryDSN: dsn, pool: pool}, nil
+	default:
+		return nil, errors.New("authentication mode is invalid")
 	}
-	authenticator, err := pairing.New(pairing.Config{
-		StateFile:    config.pairingStateFile,
-		Enrollment:   config.pairingEnrollment,
-		AllowedCIDRs: config.pairingAllowedCIDRs,
-	})
-	if err != nil {
-		return nil, "", fmt.Errorf("configure device pairing: %w", err)
-	}
-	mode := "locked"
-	if config.pairingEnrollment {
-		mode = "pairing"
-	}
-	return authenticator, mode, nil
+}
+
+func startupMessage(config config, authMode string) string {
+	return fmt.Sprintf("gateway started tcp=%s health=%s auth=%s", config.tcpAddress, config.healthAddress, authMode)
 }
 
 func valueOrDefault(value, fallback string) string {

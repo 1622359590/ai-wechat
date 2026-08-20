@@ -1,6 +1,6 @@
 # 部署与容量基线
 
-状态：本机和远程安全 staging 已部署；一次性设备配对待部署验证
+状态：本机和远程 deny-all staging 已部署；多设备注册表代码已实现、待完成工具与部署验证
 最后更新：2026-08-20
 
 ## 当前可运行部署
@@ -28,7 +28,11 @@ docker stop ai-wechat-staging-gateway-1
 
 当前 Docker Desktop 缺少可调用的 credential helper；冒烟脚本在这种情况下会创建仅含空 `auths` 的临时客户端配置来拉取公开基础镜像，并在退出时删除，不会读取或覆盖用户 Docker 配置。这不影响生成镜像内容。
 
-## 一次性设备配对配置
+## 鉴权模式
+
+网关只接受显式的 `GATEWAY_AUTH_MODE`：`deny-all`、`pairing` 或 `device-registry`。未设置时默认为 `deny-all`。不同模式的变量不能混用，部分配置会直接拒绝启动。
+
+### 一次性设备配对（仅回滚/受控测试）
 
 网关默认仍使用 `deny-all`。本机 Compose 只挂载 Git 忽略的 `deploy/state/` 到容器内专用目录，不设置配对环境变量，也不会自动接收设备。服务器目录必须只允许容器 UID/GID `65532:65532` 访问；状态文件由网关以 `0600` 创建，禁止复制到仓库、日志或聊天。
 
@@ -36,19 +40,35 @@ docker stop ai-wechat-staging-gateway-1
 
 | 环境变量 | 含义 | 安全要求 |
 |---|---|---|
+| `GATEWAY_AUTH_MODE` | 鉴权模式 | 配对时必须显式设为 `pairing` |
 | `GATEWAY_PAIRING_STATE_FILE` | 容器内状态文件路径 | 必须是 `/var/lib/ai-wechat/pairing/` 下的绝对路径 |
 | `GATEWAY_PAIRING_ENABLED` | 是否开启首次配对窗口 | 仅首次配对临时设为 `true`；非法布尔值会拒绝启动 |
 | `GATEWAY_PAIRING_ALLOWED_CIDRS` | 首次配对允许来源 | 开启配对时必填，使用逗号分隔的最窄 CIDR；锁定后删除 |
 
 安全启用顺序：
 
-1. 先保持三项均未配置部署候选镜像，确认容器健康，此时为 `deny-all`。
+1. 先使用 `GATEWAY_AUTH_MODE=deny-all` 且不设置其他鉴权变量部署候选镜像，确认容器健康。
 2. 在服务器创建专用状态目录并设置 UID/GID `65532:65532`，不要在仓库内创建真实状态文件。
 3. 设置状态文件路径，临时开启配对，并填入服务器现场确认的单设备最窄 CIDR。文档地址如 `192.0.2.8/32` 仅为示例，不能直接用于真实部署。
-4. 第一台设备成功后，删除配对开关和 CIDR，只保留状态文件路径并重启。此时为 `locked`，网络变化不会覆盖已配对设备。
+4. 第一台设备成功后，将配对开关设为 `false` 并删除 CIDR，只保留 `GATEWAY_AUTH_MODE=pairing` 和状态文件路径后重启。此时配对记录锁定，网络变化不会覆盖已配对设备。
 5. 重新配对必须由运维人员先停服务并安全移走旧状态文件；应用没有远程清除接口。
 
 状态文件损坏、版本错误或权限不是 `0600` 时，网关拒绝启动。状态只包含 Credential 的 SHA-256 允许列表指纹和创建时间；该指纹仍属于服务器秘密，不能公开。
+
+### 多设备注册表
+
+正式多设备模式使用 `GATEWAY_AUTH_MODE=device-registry`，并要求以下两个容器内文件路径：
+
+| 环境变量 | 文件内容 | 安全要求 |
+|---|---|---|
+| `GATEWAY_DEVICE_DATABASE_DSN_FILE` | 单行 PostgreSQL DSN | 绝对路径、普通文件、非符号链接、权限 `0400` 或 `0600`；不得含 CR/LF/NUL |
+| `GATEWAY_DEVICE_PEPPER_FILE` | 正好 32 字节随机二进制 pepper | 同上；必须建立服务器外加密备份，丢失后现有设备指纹无法查询 |
+
+注册表模式启动时只连接并验证 PostgreSQL，不自动修改数据库结构；迁移必须先由后续的受控管理工具执行。数据库不可用、表未迁移、任一密钥文件缺失或权限不安全时均拒绝启动。网关运行时只依赖新 PostgreSQL 注册表，不读取旧数据库或配对状态文件。
+
+默认连接保护为：最多 50 个未鉴权连接、每个来源 IP 最多 5 个未鉴权连接、最多 150 个已鉴权设备连接；环境变量分别为 `GATEWAY_MAX_UNAUTHENTICATED_CONNECTIONS`、`GATEWAY_MAX_UNAUTHENTICATED_PER_IP` 和 `GATEWAY_MAX_AUTHENTICATED_CONNECTIONS`，均只接受正整数。
+
+设备 Credential 仅在请求处理中用于计算 `HMAC-SHA-256`，数据库只存 32 字节指纹。认证尝试还受每 IP 令牌桶和每设备指数退避限制；停用或修改设备后，PostgreSQL 管理事件会关闭该设备当前连接，监听器断线后按事件游标补偿。
 
 ## 远程 staging
 

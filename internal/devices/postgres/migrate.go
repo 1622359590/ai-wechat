@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -24,22 +25,31 @@ type migration struct {
 func Open(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("parse device registry configuration: %w", err)
+		return nil, errors.New("device registry configuration is invalid")
 	}
 	config.MaxConns = 10
 	config.MinConns = 1
 	config.MaxConnIdleTime = 5 * time.Minute
-	config.MaxConnLifetime = time.Hour
+	config.MaxConnLifetime = 30 * time.Minute
 
-	pool, err := pgxpool.NewWithConfig(ctx, config)
+	startupContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	pool, err := pgxpool.NewWithConfig(startupContext, config)
 	if err != nil {
-		return nil, fmt.Errorf("open device registry: %w", err)
+		return nil, registryUnavailable(ctx)
 	}
-	if err := pool.Ping(ctx); err != nil {
+	if err := pool.Ping(startupContext); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("connect to device registry: %w", err)
+		return nil, registryUnavailable(ctx)
 	}
 	return pool, nil
+}
+
+func registryUnavailable(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errors.New("device registry is unavailable")
 }
 
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {

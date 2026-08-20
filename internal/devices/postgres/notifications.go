@@ -80,6 +80,10 @@ func (listener *AdminEventListener) MalformedCount() uint64 {
 	return listener.malformed.Load()
 }
 
+func (listener *AdminEventListener) Close() {
+	listener.closeConnection()
+}
+
 func (listener *AdminEventListener) backendPID() uint32 {
 	listener.connectionMu.Lock()
 	defer listener.connectionMu.Unlock()

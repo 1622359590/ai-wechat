@@ -333,7 +333,7 @@ Run: `go test ./internal/server -race -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 5: Add PostgreSQL admin-event listener tests and implementation**（监听与断线补偿已完成；`cmd/gateway` 接线随任务 6 的安全注册表配置完成，避免引入临时明文 DSN 或无限流启动模式）
+- [x] **Step 5: Add PostgreSQL admin-event listener tests and implementation**（监听与断线补偿已完成；`cmd/gateway` 接线随任务 6 的安全注册表配置一并完成）
 
 Integration tests publish synthetic event-ID/UUID payloads, duplicate and out-of-order IDs, malformed payloads, disconnect/reconnect the listener with an event committed during the gap, and cancel its context. The gap event must reach the callback through catch-up; malformed payloads increment only a category counter and never reach the callback.
 
@@ -434,27 +434,27 @@ Commit: `feat(gateway): limit device authentication abuse`
 - `securefile.ReadText(path string, maximumBytes int) (string, error)` accepts one nonempty line with no CR, LF, or NUL and is used for DSNs; both functions reject symlinks and unsafe modes and never include path or content in errors.
 - Registry mode opens PostgreSQL, pings with a startup timeout, runs no automatic schema mutation, constructs the repository/authenticator/limiters, and closes the pool during shutdown.
 
-- [ ] **Step 1: Write failing secure-file tests**
+- [x] **Step 1: Write failing secure-file tests**
 
 Use temporary synthetic files. Cover relative paths, symlinks, directory/FIFO, mode `0644`, wrong exact length, empty text, NUL/CR/LF, oversize text, valid `0400`/`0600`, and returned-byte mutation.
 
-- [ ] **Step 2: Verify RED, implement, and verify GREEN**
+- [x] **Step 2: Verify RED, implement, and verify GREEN**
 
 Run RED then GREEN: `go test ./internal/securefile -count=1`
 
-- [ ] **Step 3: Write failing registry-config tests**
+- [x] **Step 3: Write failing registry-config tests**
 
 Cover default deny-all, explicit deny-all, complete registry config, missing one file, pairing/registry variables mixed, unknown mode, unsafe files, database ping failure, and startup logs containing only `auth=device-registry`.
 
-- [ ] **Step 4: Implement explicit mode selection**
+- [x] **Step 4: Implement explicit mode selection**
 
 Keep pairing available only when `GATEWAY_AUTH_MODE=pairing` for controlled rollback. Registry mode must not inspect pairing files or legacy database settings. DSN and pepper are read from files, not environment values or command-line arguments.
 
-- [ ] **Step 5: Add repository pool limits**
+- [x] **Step 5: Add repository pool limits**
 
 Set `MaxConns=10`, `MinConns=1`, `MaxConnLifetime=30m`, `MaxConnIdleTime=5m`, and a 5-second startup ping timeout. Tests inspect parsed pool configuration without printing the DSN.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 
