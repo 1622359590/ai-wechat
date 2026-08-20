@@ -21,6 +21,8 @@
 - 新增连接 deadline、坏连接隔离、优雅关闭，以及 `/livez`、`/readyz` 健康检查。
 - 新增非 root、只读根文件系统的 scratch 容器与回环地址限定的本机 staging 部署。
 - 在 x86-64 Alibaba Cloud Linux 3 服务器完成回环地址限定的远程 Docker staging，并验证健康、资源限制、产物哈希和异常帧隔离。
+- 新增一次性单设备安全配对、旧设备兼容的 `DeviceAuthRsp=1011`、随机会话 Token 和后续消息 Token/过期校验。
+- 新增默认拒绝的配对配置解析、专用 Git 忽略状态挂载，以及损坏或不安全状态启动失败保护。
 
 ### 安全
 

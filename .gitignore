@@ -46,6 +46,7 @@ temp/
 *.pcap
 *.pcapng
 crash-dumps/
+deploy/state/
 
 # Customer, chat and production data
 customer_data/

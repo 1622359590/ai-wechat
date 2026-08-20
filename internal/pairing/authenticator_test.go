@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,16 @@ import (
 
 	"github.com/1622359590/ai-wechat/internal/gateway"
 )
+
+func TestNewRejectsExistingInvalidState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "credential.json")
+	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
+		t.Fatalf("write invalid state: %v", err)
+	}
+	if _, err := New(Config{StateFile: path}); !errors.Is(err, errInvalidState) {
+		t.Fatalf("New error = %v, want errInvalidState", err)
+	}
+}
 
 func TestAuthenticatorRejectsWhenEnrollmentIsDisabledAndStateIsAbsent(t *testing.T) {
 	authenticator := newTestAuthenticator(t, false, nil)

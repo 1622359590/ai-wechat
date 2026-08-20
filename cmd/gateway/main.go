@@ -9,18 +9,24 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/1622359590/ai-wechat/internal/gateway"
 	"github.com/1622359590/ai-wechat/internal/health"
+	"github.com/1622359590/ai-wechat/internal/pairing"
 	"github.com/1622359590/ai-wechat/internal/protocol"
 	"github.com/1622359590/ai-wechat/internal/server"
 	"github.com/1622359590/ai-wechat/proto/schema"
 )
 
-const hardMaxBodyBytes = 16 * 1024 * 1024
+const (
+	hardMaxBodyBytes = 16 * 1024 * 1024
+	pairingStateRoot = "/var/lib/ai-wechat/pairing"
+)
 
 type config struct {
 	tcpAddress                 string
@@ -29,6 +35,9 @@ type config struct {
 	unauthenticatedReadTimeout time.Duration
 	authenticatedReadTimeout   time.Duration
 	writeTimeout               time.Duration
+	pairingStateFile           string
+	pairingEnrollment          bool
+	pairingAllowedCIDRs        []*net.IPNet
 }
 
 func main() {
@@ -57,7 +66,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create protocol codec: %w", err)
 	}
-	handler := gateway.NewHandler(codec, gateway.DenyAllAuthenticator{}, gateway.NoopResponder{})
+	authenticator, authMode, err := configuredAuthenticator(config)
+	if err != nil {
+		return err
+	}
+	handler := gateway.NewHandler(codec, authenticator, gateway.NoopResponder{})
 	service := server.New(server.Config{
 		MaxBodyBytes:               config.maxBodyBytes,
 		UnauthenticatedReadTimeout: config.unauthenticatedReadTimeout,
@@ -87,7 +100,7 @@ func run() error {
 		}
 		errorsChannel <- err
 	}()
-	log.Printf("gateway started tcp=%s health=%s auth=deny-all", config.tcpAddress, config.healthAddress)
+	log.Printf("gateway started tcp=%s health=%s auth=%s", config.tcpAddress, config.healthAddress, authMode)
 
 	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -126,7 +139,78 @@ func loadConfig(getenv func(string) string) (config, error) {
 		}
 		result.maxBodyBytes = uint32(parsed)
 	}
+
+	enabledValue := getenv("GATEWAY_PAIRING_ENABLED")
+	if enabledValue != "" {
+		parsed, err := strconv.ParseBool(enabledValue)
+		if err != nil {
+			return config{}, errors.New("GATEWAY_PAIRING_ENABLED must be true or false")
+		}
+		result.pairingEnrollment = parsed
+	}
+	result.pairingStateFile = getenv("GATEWAY_PAIRING_STATE_FILE")
+	allowedCIDRsValue := getenv("GATEWAY_PAIRING_ALLOWED_CIDRS")
+
+	if result.pairingStateFile == "" {
+		if result.pairingEnrollment || allowedCIDRsValue != "" {
+			return config{}, errors.New("pairing enrollment requires GATEWAY_PAIRING_STATE_FILE and GATEWAY_PAIRING_ALLOWED_CIDRS")
+		}
+		return result, nil
+	}
+	if err := validatePairingStatePath(result.pairingStateFile); err != nil {
+		return config{}, err
+	}
+	if !result.pairingEnrollment {
+		if allowedCIDRsValue != "" {
+			return config{}, errors.New("GATEWAY_PAIRING_ALLOWED_CIDRS requires pairing enrollment")
+		}
+		return result, nil
+	}
+	if allowedCIDRsValue == "" {
+		return config{}, errors.New("pairing enrollment requires GATEWAY_PAIRING_ALLOWED_CIDRS")
+	}
+	for _, value := range strings.Split(allowedCIDRsValue, ",") {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return config{}, errors.New("GATEWAY_PAIRING_ALLOWED_CIDRS contains an empty CIDR")
+		}
+		_, network, err := net.ParseCIDR(value)
+		if err != nil {
+			return config{}, errors.New("GATEWAY_PAIRING_ALLOWED_CIDRS contains an invalid CIDR")
+		}
+		result.pairingAllowedCIDRs = append(result.pairingAllowedCIDRs, network)
+	}
 	return result, nil
+}
+
+func validatePairingStatePath(stateFile string) error {
+	if !filepath.IsAbs(stateFile) || filepath.Clean(stateFile) != stateFile {
+		return errors.New("GATEWAY_PAIRING_STATE_FILE must be a clean absolute path")
+	}
+	relative, err := filepath.Rel(pairingStateRoot, stateFile)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("GATEWAY_PAIRING_STATE_FILE must be below %s", pairingStateRoot)
+	}
+	return nil
+}
+
+func configuredAuthenticator(config config) (gateway.Authenticator, string, error) {
+	if config.pairingStateFile == "" {
+		return gateway.DenyAllAuthenticator{}, "deny-all", nil
+	}
+	authenticator, err := pairing.New(pairing.Config{
+		StateFile:    config.pairingStateFile,
+		Enrollment:   config.pairingEnrollment,
+		AllowedCIDRs: config.pairingAllowedCIDRs,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("configure device pairing: %w", err)
+	}
+	mode := "locked"
+	if config.pairingEnrollment {
+		mode = "pairing"
+	}
+	return authenticator, mode, nil
 }
 
 func valueOrDefault(value, fallback string) string {

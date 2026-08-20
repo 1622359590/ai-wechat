@@ -21,6 +21,8 @@ services:
     ports:
       - "127.0.0.1:19090:19090"
       - "127.0.0.1:18080:18080"
+    volumes:
+      - ./state:/var/lib/ai-wechat/pairing:rw
     healthcheck:
       test: ["CMD", "/gateway", "healthcheck"]
       interval: 10s

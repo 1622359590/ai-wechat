@@ -66,8 +66,12 @@ func New(config Config) (*Authenticator, error) {
 		mask := append(net.IPMask(nil), network.Mask...)
 		allowedCIDRs = append(allowedCIDRs, &net.IPNet{IP: ip, Mask: mask})
 	}
+	stateStore := newStore(config.StateFile)
+	if _, err := stateStore.load(); err != nil && !errors.Is(err, errStateNotFound) {
+		return nil, fmt.Errorf("load pairing state: %w", err)
+	}
 	return &Authenticator{
-		store:        newStore(config.StateFile),
+		store:        stateStore,
 		enrollment:   config.Enrollment,
 		allowedCIDRs: allowedCIDRs,
 		now:          config.Now,

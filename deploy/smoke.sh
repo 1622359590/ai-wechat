@@ -5,6 +5,9 @@ compose_file="$(dirname "$0")/compose.yaml"
 project_name="ai-wechat-staging"
 container_name="${project_name}-gateway-1"
 temporary_docker_config=""
+state_directory="$(dirname "$0")/state"
+
+mkdir -p "$state_directory"
 
 cleanup() {
     if [ -n "$temporary_docker_config" ]; then
@@ -42,6 +45,7 @@ else
         --memory 256m \
         --cpus 1.0 \
         --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+        -v "$state_directory:/var/lib/ai-wechat/pairing:rw" \
         -e GATEWAY_TCP_ADDRESS=:19090 \
         -e GATEWAY_HEALTH_ADDRESS=:18080 \
         -e GATEWAY_MAX_BODY_BYTES=1048576 \
@@ -63,6 +67,7 @@ done
 test "${health:-}" = "healthy"
 test "$(docker inspect --format '{{.Config.User}}' "$container_name")" = "65532:65532"
 test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container_name")" = "true"
+test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/ai-wechat/pairing"}}{{.RW}}{{end}}{{end}}' "$container_name")" = "true"
 docker exec "$container_name" /gateway healthcheck
 docker exec \
     -e GATEWAY_HEALTHCHECK_URL=http://127.0.0.1:18080/livez \

@@ -180,19 +180,19 @@ Commit message: `feat(gateway): complete device authentication handshake`
 - `loadConfig` parses CIDRs and returns an error for partial, malformed, or unsafe pairing configuration.
 - Default configuration still selects `gateway.DenyAllAuthenticator`.
 
-- [ ] **Step 1: Write failing config tests**
+- [x] **Step 1: Write failing config tests**
 
 Cover empty default, complete pairing config, invalid boolean, missing state file, empty CIDR list, malformed CIDR, and state path outside the configured writable state root.
 
-- [ ] **Step 2: Verify config RED, implement, and verify GREEN**
+- [x] **Step 2: Verify config RED, implement, and verify GREEN**
 
 Run RED then GREEN: `go test ./cmd/gateway -count=1`
 
-- [ ] **Step 3: Update hardened deployment**
+- [x] **Step 3: Update hardened deployment**
 
 Add a Git-ignored `deploy/state/` bind mount owned by UID/GID 65532 for local smoke only. The checked-in Compose keeps pairing disabled and contains no real CIDR, fingerprint, Token, IP, or domain.
 
-- [ ] **Step 4: Run local integration verification**
+- [x] **Step 4: Run local integration verification**
 
 Run:
 
