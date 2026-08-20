@@ -21,7 +21,8 @@ import (
 
 func TestServerRunsSyntheticFlowAndIsolatesBadConnection(t *testing.T) {
 	codec := serverCodec(t)
-	handler := gateway.NewHandler(codec, acceptAuth{}, syntheticResponder{})
+	authenticator := &acceptAuth{}
+	handler := gateway.NewHandler(codec, authenticator, syntheticResponder{})
 	service := server.New(server.Config{
 		MaxBodyBytes:               1024 * 1024,
 		UnauthenticatedReadTimeout: time.Second,
@@ -57,13 +58,29 @@ func TestServerRunsSyntheticFlowAndIsolatesBadConnection(t *testing.T) {
 	if err := frame.Write(connection, serverFixtureBody(t, "device-auth-normal"), 1024*1024); err != nil {
 		t.Fatalf("write auth: %v", err)
 	}
-	if err := frame.Write(connection, serverFixtureBody(t, "friend-talk-normal"), 1024*1024); err != nil {
-		t.Fatalf("write friend talk: %v", err)
-	}
 	if err := connection.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
 		t.Fatalf("set read deadline: %v", err)
 	}
-	replyBody, err := frame.NewDecoder(connection, 1024*1024).Read()
+	decoder := frame.NewDecoder(connection, 1024*1024)
+	authBody, err := decoder.Read()
+	if err != nil {
+		t.Fatalf("read auth response: %v", err)
+	}
+	authResponse, err := codec.Decode(authBody)
+	if err != nil {
+		t.Fatalf("decode auth response: %v", err)
+	}
+	if authResponse.MsgType != 1011 {
+		t.Fatalf("auth response MsgType = %d, want 1011", authResponse.MsgType)
+	}
+	if authenticator.peerIP == nil || !authenticator.peerIP.IsLoopback() {
+		t.Fatalf("authenticator peer IP = %v, want loopback", authenticator.peerIP)
+	}
+
+	if err := frame.Write(connection, serverFixtureBody(t, "friend-talk-normal"), 1024*1024); err != nil {
+		t.Fatalf("write friend talk: %v", err)
+	}
+	replyBody, err := decoder.Read()
 	if err != nil {
 		t.Fatalf("read reply: %v", err)
 	}
@@ -161,9 +178,14 @@ func (rejectingHandler) Handle(context.Context, *gateway.Session, []byte) ([]byt
 	return nil, errors.New("unexpected message")
 }
 
-type acceptAuth struct{}
+type acceptAuth struct {
+	peerIP net.IP
+}
 
-func (acceptAuth) Authenticate(context.Context, *dynamicpb.Message) error { return nil }
+func (authenticator *acceptAuth) Authenticate(_ context.Context, request gateway.AuthRequest) (gateway.AuthResult, error) {
+	authenticator.peerIP = append(net.IP(nil), request.PeerIP...)
+	return gateway.AuthResult{AccessToken: "synthetic-token", ExpiresAt: time.Now().Add(time.Hour)}, nil
+}
 
 type syntheticResponder struct{}
 

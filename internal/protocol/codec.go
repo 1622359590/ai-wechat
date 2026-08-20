@@ -18,6 +18,7 @@ var (
 	ErrTypeMismatch           = errors.New("message type and Any type URL do not match")
 	ErrUnsupportedMessageType = errors.New("message type is unsupported")
 	ErrInvalidReply           = errors.New("talk-to-friend reply is invalid")
+	ErrInvalidAuthResult      = errors.New("device authentication result is invalid")
 )
 
 type messageBinding struct {
@@ -33,6 +34,7 @@ type Codec struct {
 
 type Decoded struct {
 	ID           int64
+	AccessToken  string
 	RefMessageID int64
 	MsgType      int32
 	TypeURL      string
@@ -92,6 +94,7 @@ func (codec *Codec) Decode(body []byte) (*Decoded, error) {
 	msgType := int32(transport.Get(fields.ByName("MsgType")).Enum())
 	decoded := &Decoded{
 		ID:           transport.Get(fields.ByName("Id")).Int(),
+		AccessToken:  transport.Get(fields.ByName("AccessToken")).String(),
 		RefMessageID: transport.Get(fields.ByName("RefMessageId")).Int(),
 		MsgType:      msgType,
 		Transport:    transport,
@@ -121,6 +124,30 @@ func (codec *Codec) Decode(body []byte) (*Decoded, error) {
 	decoded.TypeURL = typeURL
 	decoded.Payload = payload
 	return decoded, nil
+}
+
+func (codec *Codec) EncodeDeviceAuth(accessToken string) ([]byte, error) {
+	if accessToken == "" {
+		return nil, ErrInvalidAuthResult
+	}
+	binding := codec.bindings[1011]
+	payload := dynamicpb.NewMessage(binding.descriptor)
+	setString(payload, binding.descriptor.Fields().ByName("AccessToken"), accessToken)
+	payloadBody, err := marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	packed := dynamicpb.NewMessage(codec.any)
+	anyFields := codec.any.Fields()
+	packed.Set(anyFields.ByName("type_url"), protoreflect.ValueOfString(binding.typeURL))
+	packed.Set(anyFields.ByName("value"), protoreflect.ValueOfBytes(payloadBody))
+
+	transport := dynamicpb.NewMessage(codec.transport)
+	transportFields := codec.transport.Fields()
+	transport.Set(transportFields.ByName("MsgType"), protoreflect.ValueOfEnum(1011))
+	transport.Set(transportFields.ByName("Content"), protoreflect.ValueOfMessage(packed))
+	return marshal(transport)
 }
 
 func (codec *Codec) EncodeTalkToFriend(reply Reply) ([]byte, error) {

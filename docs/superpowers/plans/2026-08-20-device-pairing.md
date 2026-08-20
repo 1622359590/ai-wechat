@@ -143,19 +143,19 @@ Commit message: `feat(gateway): add one-device pairing authenticator`
 - `gateway.AuthResult` contains `AccessToken string` and `ExpiresAt time.Time`.
 - `gateway.NewSession(peerIP net.IP) *Session` stores an immutable copied peer IP and session Token state.
 
-- [ ] **Step 1: Write failing protocol tests**
+- [x] **Step 1: Write failing protocol tests**
 
 Assert the encoded response decodes to MsgType 1011, exact type URL, literal AccessToken, and default outer Id/Ref/AccessToken fields. Assert `Decode` exposes a literal outer AccessToken from an authenticated heartbeat fixture built in the test.
 
-- [ ] **Step 2: Verify protocol RED, implement, and verify GREEN**
+- [x] **Step 2: Verify protocol RED, implement, and verify GREEN**
 
 Run RED then GREEN: `go test ./internal/protocol -count=1`
 
-- [ ] **Step 3: Write failing handler/session tests**
+- [x] **Step 3: Write failing handler/session tests**
 
 Assert auth success returns a response before authentication becomes usable, failed response encoding leaves the session unauthenticated, correct Token permits heartbeat, and missing/wrong/expired Token returns stable sentinel errors. Use a deterministic fake clock and synthetic Token.
 
-- [ ] **Step 4: Verify handler RED, implement, and verify GREEN**
+- [x] **Step 4: Verify handler RED, implement, and verify GREEN**
 
 Run RED then GREEN: `go test ./internal/gateway ./internal/server -race -count=1`
 

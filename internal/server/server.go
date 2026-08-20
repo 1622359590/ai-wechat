@@ -89,7 +89,7 @@ func (server *Server) serveConnection(connection net.Conn) {
 		server.wait.Done()
 	}()
 
-	session := gateway.NewSession()
+	session := gateway.NewSession(remoteIP(connection.RemoteAddr()))
 	decoder := frame.NewDecoder(connection, server.config.MaxBodyBytes)
 	ctx := context.Background()
 	for {
@@ -118,6 +118,20 @@ func (server *Server) serveConnection(connection net.Conn) {
 			return
 		}
 	}
+}
+
+func remoteIP(address net.Addr) net.IP {
+	if address == nil {
+		return nil
+	}
+	if tcpAddress, ok := address.(*net.TCPAddr); ok {
+		return append(net.IP(nil), tcpAddress.IP...)
+	}
+	host, _, err := net.SplitHostPort(address.String())
+	if err != nil {
+		return nil
+	}
+	return net.ParseIP(host)
 }
 
 func (server *Server) Shutdown(ctx context.Context) error {

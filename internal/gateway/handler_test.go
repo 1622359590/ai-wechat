@@ -5,12 +5,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/1622359590/ai-wechat/internal/gateway"
 	"github.com/1622359590/ai-wechat/internal/protocol"
 	"github.com/1622359590/ai-wechat/proto/schema"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
@@ -20,7 +24,7 @@ func TestHandlerRequiresSuccessfulAuthentication(t *testing.T) {
 	auth := fixtureBody(t, "device-auth-normal")
 
 	denyHandler := gateway.NewHandler(codec, gateway.DenyAllAuthenticator{}, gateway.NoopResponder{})
-	session := gateway.NewSession()
+	session := gateway.NewSession(net.ParseIP("192.0.2.10"))
 	if _, err := denyHandler.Handle(context.Background(), session, heartbeat); !errors.Is(err, gateway.ErrAuthenticationRequired) {
 		t.Fatalf("pre-auth heartbeat error = %v, want ErrAuthenticationRequired", err)
 	}
@@ -33,12 +37,20 @@ func TestHandlerRequiresSuccessfulAuthentication(t *testing.T) {
 
 	accept := &acceptAuthenticator{}
 	handler := gateway.NewHandler(codec, accept, gateway.NoopResponder{})
-	session = gateway.NewSession()
-	if response, err := handler.Handle(context.Background(), session, auth); err != nil || len(response) != 0 {
+	session = gateway.NewSession(net.ParseIP("192.0.2.10"))
+	response, err := handler.Handle(context.Background(), session, auth)
+	if err != nil || len(response) == 0 {
 		t.Fatalf("authenticate response length/error = %d/%v", len(response), err)
 	}
 	if !session.Authenticated() || accept.calls != 1 {
 		t.Fatalf("authenticated=%v calls=%d, want true/1", session.Authenticated(), accept.calls)
+	}
+	decoded, err := codec.Decode(response)
+	if err != nil || decoded.MsgType != 1011 {
+		t.Fatalf("decode auth response type/error = %d/%v", decoded.MsgType, err)
+	}
+	if accept.request.AuthType != 1 || accept.request.Credential != "synthetic-credential" || !accept.request.PeerIP.Equal(net.ParseIP("192.0.2.10")) {
+		t.Fatal("authenticator did not receive the decoded request and peer IP")
 	}
 	if response, err := handler.Handle(context.Background(), session, heartbeat); err != nil || len(response) != 0 {
 		t.Fatalf("heartbeat response length/error = %d/%v", len(response), err)
@@ -49,7 +61,7 @@ func TestHandlerRejectsAuthenticationAfterSessionIsAuthenticated(t *testing.T) {
 	codec := loadCodec(t)
 	authenticator := &acceptAuthenticator{}
 	handler := gateway.NewHandler(codec, authenticator, gateway.NoopResponder{})
-	session := gateway.NewSession()
+	session := gateway.NewSession(net.ParseIP("192.0.2.10"))
 	auth := fixtureBody(t, "device-auth-normal")
 
 	if _, err := handler.Handle(context.Background(), session, auth); err != nil {
@@ -67,7 +79,7 @@ func TestHandlerRoutesFriendTalkAndEncodesReply(t *testing.T) {
 	codec := loadCodec(t)
 	responder := &replyResponder{}
 	handler := gateway.NewHandler(codec, &acceptAuthenticator{}, responder)
-	session := gateway.NewSession()
+	session := gateway.NewSession(net.ParseIP("192.0.2.10"))
 
 	if _, err := handler.Handle(context.Background(), session, fixtureBody(t, "device-auth-normal")); err != nil {
 		t.Fatalf("authenticate: %v", err)
@@ -88,17 +100,85 @@ func TestHandlerRoutesFriendTalkAndEncodesReply(t *testing.T) {
 	}
 }
 
-type acceptAuthenticator struct {
-	calls int
+func TestHandlerRejectsMissingWrongAndExpiredAccessTokens(t *testing.T) {
+	codec := loadCodec(t)
+	tests := []struct {
+		name          string
+		authenticator *acceptAuthenticator
+		heartbeat     []byte
+		want          error
+	}{
+		{name: "missing", authenticator: &acceptAuthenticator{}, heartbeat: transportWithAccessToken(t, codec, fixtureBody(t, "heart-beat-normal"), ""), want: gateway.ErrAccessTokenInvalid},
+		{name: "wrong", authenticator: &acceptAuthenticator{}, heartbeat: transportWithAccessToken(t, codec, fixtureBody(t, "heart-beat-normal"), "synthetic-wrong"), want: gateway.ErrAccessTokenInvalid},
+		{name: "expired", authenticator: &acceptAuthenticator{expiresAt: time.Unix(1, 0)}, heartbeat: fixtureBody(t, "heart-beat-normal"), want: gateway.ErrAccessTokenExpired},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler := gateway.NewHandler(codec, test.authenticator, gateway.NoopResponder{})
+			session := gateway.NewSession(net.ParseIP("192.0.2.10"))
+			if _, err := handler.Handle(context.Background(), session, fixtureBody(t, "device-auth-normal")); err != nil {
+				t.Fatalf("authenticate: %v", err)
+			}
+			if _, err := handler.Handle(context.Background(), session, test.heartbeat); !errors.Is(err, test.want) {
+				t.Fatalf("heartbeat error = %v, want %v", err, test.want)
+			}
+		})
+	}
 }
 
-func (authenticator *acceptAuthenticator) Authenticate(_ context.Context, message *dynamicpb.Message) error {
-	authenticator.calls++
-	credential := message.Descriptor().Fields().ByName("Credential")
-	if message.Get(credential).String() != "synthetic-credential" {
-		return errors.New("unexpected synthetic credential")
+func TestHandlerDoesNotAuthenticateWhenAuthResponseCannotBeEncoded(t *testing.T) {
+	codec := loadCodec(t)
+	handler := gateway.NewHandler(codec, &acceptAuthenticator{forceEmptyToken: true}, gateway.NoopResponder{})
+	session := gateway.NewSession(net.ParseIP("192.0.2.10"))
+	if _, err := handler.Handle(context.Background(), session, fixtureBody(t, "device-auth-normal")); !errors.Is(err, protocol.ErrInvalidAuthResult) {
+		t.Fatalf("authenticate error = %v, want ErrInvalidAuthResult", err)
 	}
-	return nil
+	if session.Authenticated() {
+		t.Fatal("session became authenticated without an encodable response")
+	}
+}
+
+type acceptAuthenticator struct {
+	calls           int
+	request         gateway.AuthRequest
+	accessToken     string
+	expiresAt       time.Time
+	forceEmptyToken bool
+}
+
+func (authenticator *acceptAuthenticator) Authenticate(_ context.Context, request gateway.AuthRequest) (gateway.AuthResult, error) {
+	authenticator.calls++
+	authenticator.request = request
+	if request.Credential != "synthetic-credential" {
+		return gateway.AuthResult{}, errors.New("unexpected synthetic credential")
+	}
+	accessToken := authenticator.accessToken
+	if accessToken == "" && !authenticator.forceEmptyToken {
+		accessToken = "synthetic-token"
+	}
+	expiresAt := authenticator.expiresAt
+	if expiresAt.IsZero() {
+		expiresAt = time.Now().Add(time.Hour)
+	}
+	return gateway.AuthResult{AccessToken: accessToken, ExpiresAt: expiresAt}, nil
+}
+
+func transportWithAccessToken(t *testing.T, codec *protocol.Codec, body []byte, accessToken string) []byte {
+	t.Helper()
+	decoded, err := codec.Decode(body)
+	if err != nil {
+		t.Fatalf("decode transport: %v", err)
+	}
+	field := decoded.Transport.Descriptor().Fields().ByName(protoreflect.Name("AccessToken"))
+	if field == nil {
+		t.Fatal("transport AccessToken field not found")
+	}
+	decoded.Transport.Set(field, protoreflect.ValueOfString(accessToken))
+	result, err := (proto.MarshalOptions{Deterministic: true}).Marshal(decoded.Transport)
+	if err != nil {
+		t.Fatalf("marshal transport: %v", err)
+	}
+	return result
 }
 
 type replyResponder struct {

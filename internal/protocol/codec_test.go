@@ -143,6 +143,50 @@ func TestEncodeTalkToFriendRoundTripsSemanticFields(t *testing.T) {
 	}
 }
 
+func TestEncodeDeviceAuthMatchesLegacyResponseEnvelope(t *testing.T) {
+	codec := newCodec(t)
+	body, err := codec.EncodeDeviceAuth("synthetic-token")
+	if err != nil {
+		t.Fatalf("encode device auth: %v", err)
+	}
+	decoded, err := codec.Decode(body)
+	if err != nil {
+		t.Fatalf("decode device auth: %v", err)
+	}
+	if decoded.MsgType != 1011 {
+		t.Fatalf("MsgType = %d, want 1011", decoded.MsgType)
+	}
+	if decoded.TypeURL != "type.googleapis.com/Jubo.JuLiao.IM.Wx.Proto.DeviceAuthRspMessage" {
+		t.Fatalf("type URL = %q", decoded.TypeURL)
+	}
+	fields := decoded.Payload.Descriptor().Fields()
+	assertStringField(t, decoded.Payload, fields.ByName("AccessToken"), "synthetic-token")
+	if decoded.Payload.Has(fields.ByName("Extra")) {
+		t.Fatal("auth response unexpectedly set Extra")
+	}
+	if decoded.ID != 0 || decoded.RefMessageID != 0 || decoded.AccessToken != "" {
+		t.Fatalf("outer defaults = id:%d ref:%d token:%q", decoded.ID, decoded.RefMessageID, decoded.AccessToken)
+	}
+}
+
+func TestDecodeExposesOuterAccessToken(t *testing.T) {
+	codec := newCodec(t)
+	for _, fixture := range readFixtures(t) {
+		if fixture.Case != "heart-beat-normal" {
+			continue
+		}
+		decoded, err := codec.Decode(fixtureBody(t, fixture))
+		if err != nil {
+			t.Fatalf("decode heartbeat: %v", err)
+		}
+		if got, want := decoded.AccessToken, "synthetic-token"; got != want {
+			t.Fatalf("AccessToken = %q, want %q", got, want)
+		}
+		return
+	}
+	t.Fatal("heart-beat-normal fixture not found")
+}
+
 func newCodec(t *testing.T) *protocol.Codec {
 	t.Helper()
 	files, err := schema.Load()
