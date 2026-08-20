@@ -139,7 +139,7 @@ Commit: `feat(devices): add keyed device identity`
 - Produces `func NewRepository(pool *pgxpool.Pool) *Repository` implementing `devices.Repository`.
 - Produces a repeatable real-PostgreSQL test command; integration tests require `TEST_POSTGRES_DSN` and never embed credentials.
 
-- [ ] **Step 1: Write the migration SQL and failing migration tests**
+- [x] **Step 1: Write the migration SQL and failing migration tests**
 
 The migration creates:
 
@@ -175,7 +175,7 @@ CREATE TABLE device_admin_events (
 
 Tests assert one-time migration, concurrent migration serialization, every CHECK constraint, the unique fingerprint, and rollback on a failing migration.
 
-- [ ] **Step 2: Create the isolated PostgreSQL test harness and verify RED**
+- [x] **Step 2: Create the isolated PostgreSQL test harness and verify RED**
 
 `scripts/test-postgres.sh` must use `mktemp -d`, generate test-only random credentials, start only `deploy/compose.test.yaml`, wait on `pg_isready`, export `TEST_POSTGRES_DSN` only to the test process, and always run `docker compose down -v` in a trap.
 
@@ -183,7 +183,7 @@ Run: `./scripts/test-postgres.sh go test ./internal/devices/postgres -run TestMi
 
 Expected: FAIL because `Migrate` is absent or constraints are not installed.
 
-- [ ] **Step 3: Implement migration runner and verify GREEN**
+- [x] **Step 3: Implement migration runner and verify GREEN**
 
 Embed ordered `.sql` files, acquire one fixed PostgreSQL advisory lock for the transaction, apply each unapplied version once, and reject a database version newer than the binary.
 
@@ -191,13 +191,13 @@ Run: `./scripts/test-postgres.sh go test ./internal/devices/postgres -run TestMi
 
 Expected: PASS.
 
-- [ ] **Step 4: Write failing repository behavior tests**
+- [x] **Step 4: Write failing repository behavior tests**
 
 Cover active/no-expiry, active/future-expiry, exact-expiry rejection, disabled rejection, unknown rejection, duplicate Add, list limit validation, status changes, expiry changes, audit events, and `TouchAuthenticated` write coalescing within one hour.
 
 Tests must assert only stable sentinel errors and synthetic internal UUIDs; no test output may include a fingerprint.
 
-- [ ] **Step 5: Verify repository RED, implement, and verify GREEN**
+- [x] **Step 5: Verify repository RED, implement, and verify GREEN**
 
 Run RED before implementation, then GREEN:
 
@@ -207,7 +207,7 @@ Run RED before implementation, then GREEN:
 
 Use parameterized pgx queries. `Authorize` uses one indexed equality lookup and returns `ErrNotAuthorized` for all non-authorized states. Administrative updates and their audit event occur in the same transaction. Insert the event with `RETURNING id`, then publish `pg_notify('device_admin_events', event_id || ':' || device_id::text)`; PostgreSQL releases the notification only after commit.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run: `./scripts/test-postgres.sh go test ./internal/devices/postgres -count=1`
 
