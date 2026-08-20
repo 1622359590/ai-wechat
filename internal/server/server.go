@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/1622359590/ai-wechat/internal/devices"
 	"github.com/1622359590/ai-wechat/internal/frame"
 	"github.com/1622359590/ai-wechat/internal/gateway"
 )
@@ -18,15 +19,17 @@ type MessageHandler interface {
 }
 
 type Config struct {
-	MaxBodyBytes               uint32
-	UnauthenticatedReadTimeout time.Duration
-	AuthenticatedReadTimeout   time.Duration
-	WriteTimeout               time.Duration
+	MaxBodyBytes                uint32
+	UnauthenticatedReadTimeout  time.Duration
+	AuthenticatedReadTimeout    time.Duration
+	WriteTimeout                time.Duration
+	MaxAuthenticatedConnections int
 }
 
 type Server struct {
-	config  Config
-	handler MessageHandler
+	config            Config
+	handler           MessageHandler
+	deviceConnections *deviceConnections
 
 	ready       atomic.Bool
 	closing     atomic.Bool
@@ -38,9 +41,10 @@ type Server struct {
 
 func New(config Config, handler MessageHandler) *Server {
 	return &Server{
-		config:      config,
-		handler:     handler,
-		connections: make(map[net.Conn]struct{}),
+		config:            config,
+		handler:           handler,
+		deviceConnections: newDeviceConnections(config.MaxAuthenticatedConnections),
+		connections:       make(map[net.Conn]struct{}),
 	}
 }
 
@@ -81,7 +85,12 @@ func (server *Server) Serve(listener net.Listener) error {
 }
 
 func (server *Server) serveConnection(connection net.Conn) {
+	var registeredDeviceID devices.ID
+	var registeredGeneration uint64
 	defer func() {
+		if registeredDeviceID != "" {
+			server.deviceConnections.Unregister(registeredDeviceID, registeredGeneration)
+		}
 		_ = connection.Close()
 		server.mu.Lock()
 		delete(server.connections, connection)
@@ -117,7 +126,22 @@ func (server *Server) serveConnection(connection net.Conn) {
 		if err := frame.Write(connection, response, server.config.MaxBodyBytes); err != nil {
 			return
 		}
+		if deviceID, pending := session.TakePendingActivation(); pending {
+			generation, replaced, err := server.deviceConnections.Register(deviceID, connection)
+			if err != nil {
+				return
+			}
+			registeredDeviceID = deviceID
+			registeredGeneration = generation
+			if replaced != nil {
+				_ = replaced.Close()
+			}
+		}
 	}
+}
+
+func (server *Server) DisconnectDevice(deviceID devices.ID) {
+	server.deviceConnections.CloseDevice(deviceID)
 }
 
 func remoteIP(address net.Addr) net.IP {

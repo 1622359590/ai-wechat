@@ -300,11 +300,11 @@ Commit: `feat(gateway): authenticate registered devices`
 - Produces `postgres.NewAdminEventListener(ctx context.Context, dsn string, onDevice func(devices.ID)) (*AdminEventListener, error)`; construction establishes the initial dedicated pgx connection, subscribes with `LISTEN`, and records the current maximum admin-event ID before any device connection can be accepted.
 - Produces `func (listener *AdminEventListener) Run(ctx context.Context) error`; it receives `eventID:deviceUUID` notifications, reconnects with bounded backoff, queries every event newer than its cursor after reconnect, de-duplicates event IDs, and stops on context cancellation.
 
-- [ ] **Step 1: Write failing directory tests**
+- [x] **Step 1: Write failing directory tests**
 
 Cover two different simultaneous device IDs, same-device replacement, maximum capacity, old-generation unregister after replacement, explicit device close, and concurrent register/unregister under `go test -race`.
 
-- [ ] **Step 2: Verify RED, implement the directory, and verify GREEN**
+- [x] **Step 2: Verify RED, implement the directory, and verify GREEN**
 
 Run RED then GREEN:
 
@@ -314,7 +314,7 @@ go test ./internal/server -run TestDeviceConnections -race -count=1
 
 The directory never logs device IDs and closes connections outside its mutex.
 
-- [ ] **Step 3: Write failing server integration tests**
+- [x] **Step 3: Write failing server integration tests**
 
 Use synthetic auth results with internal IDs. Assert:
 
@@ -325,7 +325,7 @@ Use synthetic auth results with internal IDs. Assert:
 - different device IDs stay online together;
 - capacity overflow closes the newly authenticated connection without evicting an existing different device.
 
-- [ ] **Step 4: Implement post-write activation and verify GREEN**
+- [x] **Step 4: Implement post-write activation and verify GREEN**
 
 After `frame.Write` succeeds, call `session.TakePendingActivation`, register the connection, store the returned generation in the serving goroutine, then close any replaced connection. The deferred cleanup unregisters only the exact device ID/generation pair.
 
@@ -333,7 +333,7 @@ Run: `go test ./internal/server -race -count=1`
 
 Expected: PASS.
 
-- [ ] **Step 5: Add PostgreSQL admin-event listener tests and implementation**
+- [ ] **Step 5: Add PostgreSQL admin-event listener tests and implementation**（监听与断线补偿已完成；`cmd/gateway` 接线随任务 6 的安全注册表配置完成，避免引入临时明文 DSN 或无限流启动模式）
 
 Integration tests publish synthetic event-ID/UUID payloads, duplicate and out-of-order IDs, malformed payloads, disconnect/reconnect the listener with an event committed during the gap, and cancel its context. The gap event must reach the callback through catch-up; malformed payloads increment only a category counter and never reach the callback.
 
@@ -345,7 +345,7 @@ Run RED then GREEN:
 
 Wire the callback in `cmd/gateway` to `service.DisconnectDevice`. `NewAdminEventListener` failure prevents registry-auth gateway startup; after construction, `Run` executes in the gateway error group. A later connection loss retries from one second to a maximum of 30 seconds while device authorization remains fail-closed through repository queries.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run:
 

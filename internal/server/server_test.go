@@ -8,9 +8,11 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/1622359590/ai-wechat/internal/devices"
 	"github.com/1622359590/ai-wechat/internal/frame"
 	"github.com/1622359590/ai-wechat/internal/gateway"
 	"github.com/1622359590/ai-wechat/internal/protocol"
@@ -105,6 +107,120 @@ func TestServerRunsSyntheticFlowAndIsolatesBadConnection(t *testing.T) {
 	}
 }
 
+func TestServerReplacesSameDeviceOnlyAfterAuthenticationResponse(t *testing.T) {
+	deviceID := devices.ID("00000000-0000-0000-0000-000000000041")
+	service, listener := startDeviceServer(t, &acceptAuth{deviceIDs: []devices.ID{deviceID, deviceID}}, 2)
+	first := authenticateConnection(t, listener.Addr().String())
+	defer first.Close()
+	second := authenticateConnection(t, listener.Addr().String())
+	defer second.Close()
+
+	assertConnectionClosed(t, first)
+	assertConnectionOpen(t, second)
+	service.DisconnectDevice(deviceID)
+	assertConnectionClosed(t, second)
+}
+
+func TestServerKeepsDifferentDevicesOnline(t *testing.T) {
+	firstID := devices.ID("00000000-0000-0000-0000-000000000042")
+	secondID := devices.ID("00000000-0000-0000-0000-000000000043")
+	service, listener := startDeviceServer(t, &acceptAuth{deviceIDs: []devices.ID{firstID, secondID}}, 2)
+	first := authenticateConnection(t, listener.Addr().String())
+	defer first.Close()
+	second := authenticateConnection(t, listener.Addr().String())
+	defer second.Close()
+
+	service.DisconnectDevice(firstID)
+	assertConnectionClosed(t, first)
+	assertConnectionOpen(t, second)
+	service.DisconnectDevice(secondID)
+	assertConnectionClosed(t, second)
+}
+
+func TestServerClosesCapacityOverflowWithoutEvictingExistingDevice(t *testing.T) {
+	firstID := devices.ID("00000000-0000-0000-0000-000000000044")
+	secondID := devices.ID("00000000-0000-0000-0000-000000000045")
+	service, listener := startDeviceServer(t, &acceptAuth{deviceIDs: []devices.ID{firstID, secondID}}, 1)
+	first := authenticateConnection(t, listener.Addr().String())
+	defer first.Close()
+	second := authenticateConnection(t, listener.Addr().String())
+	defer second.Close()
+
+	assertConnectionClosed(t, second)
+	assertConnectionOpen(t, first)
+	service.DisconnectDevice(firstID)
+	assertConnectionClosed(t, first)
+}
+
+func startDeviceServer(t *testing.T, authenticator gateway.Authenticator, max int) (*server.Server, net.Listener) {
+	t.Helper()
+	service := server.New(server.Config{
+		MaxBodyBytes:                1024 * 1024,
+		UnauthenticatedReadTimeout:  time.Second,
+		AuthenticatedReadTimeout:    time.Second,
+		WriteTimeout:                time.Second,
+		MaxAuthenticatedConnections: max,
+	}, gateway.NewHandler(serverCodec(t), authenticator, gateway.NoopResponder{}))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() { _ = service.Serve(listener) }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = service.Shutdown(ctx)
+	})
+	return service, listener
+}
+
+func authenticateConnection(t *testing.T, address string) net.Conn {
+	t.Helper()
+	connection, err := net.Dial("tcp", address)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	if err := frame.Write(connection, serverFixtureBody(t, "device-auth-normal"), 1024*1024); err != nil {
+		connection.Close()
+		t.Fatalf("write auth: %v", err)
+	}
+	if err := connection.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		connection.Close()
+		t.Fatalf("set auth deadline: %v", err)
+	}
+	if _, err := frame.NewDecoder(connection, 1024*1024).Read(); err != nil {
+		connection.Close()
+		t.Fatalf("read auth response: %v", err)
+	}
+	return connection
+}
+
+func assertConnectionClosed(t *testing.T, connection net.Conn) {
+	t.Helper()
+	if err := connection.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("set closed deadline: %v", err)
+	}
+	buffer := make([]byte, 1)
+	if _, err := connection.Read(buffer); err == nil {
+		t.Fatal("connection remained open")
+	} else if timeout, ok := err.(net.Error); ok && timeout.Timeout() {
+		t.Fatalf("connection did not close before deadline: %v", err)
+	}
+}
+
+func assertConnectionOpen(t *testing.T, connection net.Conn) {
+	t.Helper()
+	if err := connection.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+		t.Fatalf("set open deadline: %v", err)
+	}
+	buffer := make([]byte, 1)
+	if _, err := connection.Read(buffer); err == nil {
+		t.Fatal("unexpected data on idle connection")
+	} else if timeout, ok := err.(net.Error); !ok || !timeout.Timeout() {
+		t.Fatalf("connection closed unexpectedly: %v", err)
+	}
+}
+
 func TestServerClosesConnectionAcceptedDuringShutdown(t *testing.T) {
 	serverConnection, clientConnection := net.Pipe()
 	defer clientConnection.Close()
@@ -179,12 +295,22 @@ func (rejectingHandler) Handle(context.Context, *gateway.Session, []byte) ([]byt
 }
 
 type acceptAuth struct {
-	peerIP net.IP
+	mu        sync.Mutex
+	peerIP    net.IP
+	deviceIDs []devices.ID
+	calls     int
 }
 
 func (authenticator *acceptAuth) Authenticate(_ context.Context, request gateway.AuthRequest) (gateway.AuthResult, error) {
+	authenticator.mu.Lock()
+	defer authenticator.mu.Unlock()
 	authenticator.peerIP = append(net.IP(nil), request.PeerIP...)
-	return gateway.AuthResult{AccessToken: "synthetic-token", ExpiresAt: time.Now().Add(time.Hour)}, nil
+	var deviceID devices.ID
+	if authenticator.calls < len(authenticator.deviceIDs) {
+		deviceID = authenticator.deviceIDs[authenticator.calls]
+	}
+	authenticator.calls++
+	return gateway.AuthResult{AccessToken: "synthetic-token", ExpiresAt: time.Now().Add(time.Hour), DeviceID: deviceID}, nil
 }
 
 type syntheticResponder struct{}
