@@ -84,6 +84,9 @@ func TestAuthenticatorEnrollsOnceAndIssuesRandomSessionToken(t *testing.T) {
 	if got, want := result.ExpiresAt, now.Add(time.Hour); !got.Equal(want) {
 		t.Fatalf("ExpiresAt = %s, want %s", got, want)
 	}
+	if result.DeviceID != "" {
+		t.Fatalf("legacy pairing DeviceID = %q, want empty", result.DeviceID)
+	}
 	if _, err := newStore(path).load(); err != nil {
 		t.Fatalf("load enrolled state: %v", err)
 	}

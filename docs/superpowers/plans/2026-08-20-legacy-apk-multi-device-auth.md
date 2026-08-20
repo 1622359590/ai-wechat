@@ -231,7 +231,7 @@ Commit: `feat(devices): add postgres registry`
 - Produces `deviceauth.New(repository devices.Repository, fingerprinter *devices.Fingerprinter, limiter AttemptLimiter, now func() time.Time, random io.Reader) (*Authenticator, error)`.
 - `AttemptLimiter` has `Allow(net.IP, devices.Fingerprint, time.Time) error`, `Failure(devices.Fingerprint, time.Time)`, and `Success(devices.Fingerprint)`.
 
-- [ ] **Step 1: Write failing authenticator tests**
+- [x] **Step 1: Write failing authenticator tests**
 
 Use a real in-memory fake repository, not mock call assertions. Cover:
 
@@ -244,19 +244,19 @@ func TestAuthenticatorFailsClosedWhenRepositoryFails(t *testing.T)
 func TestAuthenticatorDoesNotExposeCredentialOrFingerprintInErrors(t *testing.T)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `go test ./internal/deviceauth ./internal/gateway -count=1`
 
 Expected: FAIL because `internal/deviceauth` and `AuthResult.DeviceID` are absent.
 
-- [ ] **Step 3: Implement the minimal authenticator**
+- [x] **Step 3: Implement the minimal authenticator**
 
 Validate Protobuf string input as nonempty valid UTF-8 and at most 4096 bytes without trimming or normalization. Compute the HMAC once, apply the attempt limiter before repository access, authorize against the supplied clock, generate 32 random bytes, and return a 64-character lowercase hexadecimal token expiring in one hour.
 
 Call `Failure` only for authorization rejection; a PostgreSQL outage consumes the IP attempt token but does not extend per-Credential backoff. After authorization and token generation, call `TouchAuthenticated`; failure is fail-closed but does not extend Credential backoff. Call `Success` only after the touch succeeds. Error strings contain categories only.
 
-- [ ] **Step 4: Extend session identity without changing wire output**
+- [x] **Step 4: Extend session identity without changing wire output**
 
 Store `AuthResult.DeviceID` when the session becomes authenticated and expose:
 
@@ -267,7 +267,7 @@ func (session *Session) TakePendingActivation() (devices.ID, bool)
 
 `TakePendingActivation` succeeds once, only for nonempty registry-authenticated IDs. Existing pairing tests continue to pass and never invent a device identifier.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run:
 

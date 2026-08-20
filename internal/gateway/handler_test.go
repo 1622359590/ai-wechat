@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/1622359590/ai-wechat/internal/devices"
 	"github.com/1622359590/ai-wechat/internal/gateway"
 	"github.com/1622359590/ai-wechat/internal/protocol"
 	"github.com/1622359590/ai-wechat/proto/schema"
@@ -44,6 +45,15 @@ func TestHandlerRequiresSuccessfulAuthentication(t *testing.T) {
 	}
 	if !session.Authenticated() || accept.calls != 1 {
 		t.Fatalf("authenticated=%v calls=%d, want true/1", session.Authenticated(), accept.calls)
+	}
+	if deviceID, ok := session.DeviceID(); !ok || deviceID != acceptDeviceID {
+		t.Fatalf("session DeviceID = %q/%v, want %q/true", deviceID, ok, acceptDeviceID)
+	}
+	if deviceID, ok := session.TakePendingActivation(); !ok || deviceID != acceptDeviceID {
+		t.Fatalf("first pending activation = %q/%v, want %q/true", deviceID, ok, acceptDeviceID)
+	}
+	if deviceID, ok := session.TakePendingActivation(); ok || deviceID != "" {
+		t.Fatalf("second pending activation = %q/%v, want empty/false", deviceID, ok)
 	}
 	decoded, err := codec.Decode(response)
 	if err != nil || decoded.MsgType != 1011 {
@@ -136,14 +146,35 @@ func TestHandlerDoesNotAuthenticateWhenAuthResponseCannotBeEncoded(t *testing.T)
 	if session.Authenticated() {
 		t.Fatal("session became authenticated without an encodable response")
 	}
+	if _, ok := session.TakePendingActivation(); ok {
+		t.Fatal("session exposed activation without an encodable response")
+	}
 }
 
+func TestSessionLeavesLegacyPairingWithoutDeviceActivation(t *testing.T) {
+	codec := loadCodec(t)
+	handler := gateway.NewHandler(codec, &acceptAuthenticator{legacyNoDeviceID: true}, gateway.NoopResponder{})
+	session := gateway.NewSession(net.ParseIP("192.0.2.10"))
+	if _, err := handler.Handle(context.Background(), session, fixtureBody(t, "device-auth-normal")); err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	if deviceID, ok := session.DeviceID(); ok || deviceID != "" {
+		t.Fatalf("legacy DeviceID = %q/%v, want empty/false", deviceID, ok)
+	}
+	if _, ok := session.TakePendingActivation(); ok {
+		t.Fatal("legacy session exposed a pending activation")
+	}
+}
+
+const acceptDeviceID devices.ID = "00000000-0000-0000-0000-000000000020"
+
 type acceptAuthenticator struct {
-	calls           int
-	request         gateway.AuthRequest
-	accessToken     string
-	expiresAt       time.Time
-	forceEmptyToken bool
+	calls            int
+	request          gateway.AuthRequest
+	accessToken      string
+	expiresAt        time.Time
+	forceEmptyToken  bool
+	legacyNoDeviceID bool
 }
 
 func (authenticator *acceptAuthenticator) Authenticate(_ context.Context, request gateway.AuthRequest) (gateway.AuthResult, error) {
@@ -160,7 +191,11 @@ func (authenticator *acceptAuthenticator) Authenticate(_ context.Context, reques
 	if expiresAt.IsZero() {
 		expiresAt = time.Now().Add(time.Hour)
 	}
-	return gateway.AuthResult{AccessToken: accessToken, ExpiresAt: expiresAt}, nil
+	deviceID := acceptDeviceID
+	if authenticator.legacyNoDeviceID {
+		deviceID = ""
+	}
+	return gateway.AuthResult{AccessToken: accessToken, ExpiresAt: expiresAt, DeviceID: deviceID}, nil
 }
 
 func transportWithAccessToken(t *testing.T, codec *protocol.Codec, body []byte, accessToken string) []byte {

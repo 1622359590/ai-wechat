@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/1622359590/ai-wechat/internal/devices"
 	"github.com/1622359590/ai-wechat/internal/protocol"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
@@ -23,6 +25,7 @@ type AuthRequest struct {
 type AuthResult struct {
 	AccessToken string
 	ExpiresAt   time.Time
+	DeviceID    devices.ID
 }
 
 var (
@@ -42,10 +45,13 @@ type Responder interface {
 }
 
 type Session struct {
-	authenticated atomic.Bool
-	peerIP        net.IP
-	accessToken   string
-	expiresAt     time.Time
+	authenticated     atomic.Bool
+	metadataMu        sync.Mutex
+	peerIP            net.IP
+	accessToken       string
+	expiresAt         time.Time
+	deviceID          devices.ID
+	pendingActivation bool
 }
 
 func NewSession(peerIP net.IP) *Session {
@@ -57,9 +63,35 @@ func (session *Session) Authenticated() bool {
 }
 
 func (session *Session) authenticate(result AuthResult) {
+	session.metadataMu.Lock()
 	session.accessToken = result.AccessToken
 	session.expiresAt = result.ExpiresAt
+	session.deviceID = result.DeviceID
+	session.pendingActivation = result.DeviceID != ""
+	session.metadataMu.Unlock()
 	session.authenticated.Store(true)
+}
+
+func (session *Session) DeviceID() (devices.ID, bool) {
+	if !session.Authenticated() {
+		return "", false
+	}
+	session.metadataMu.Lock()
+	defer session.metadataMu.Unlock()
+	return session.deviceID, session.deviceID != ""
+}
+
+func (session *Session) TakePendingActivation() (devices.ID, bool) {
+	if !session.Authenticated() {
+		return "", false
+	}
+	session.metadataMu.Lock()
+	defer session.metadataMu.Unlock()
+	if !session.pendingActivation || session.deviceID == "" {
+		return "", false
+	}
+	session.pendingActivation = false
+	return session.deviceID, true
 }
 
 func (session *Session) validateAccessToken(accessToken string, now time.Time) error {
