@@ -1,14 +1,14 @@
 # 数据模型基线
 
 状态：概念设计，尚未建库
-最后更新：2026-08-18
+最后更新：2026-08-20
 
 ## PostgreSQL 建议实体
 
 | 实体 | 关键字段 | 用途 |
 |---|---|---|
 | `tenants` | `id`, `name`, `status` | 多租户边界 |
-| `devices` | `id`, `tenant_id`, `external_ref_hash`, `status` | 设备登记，不保存明文认证秘密 |
+| `devices` | `id`, `tenant_id`, `credential_fingerprint`, `credential_version`, `label`, `status`, `auth_expires_at`, `last_authenticated_at` | 设备登记，不保存明文 Credential |
 | `device_sessions` | `id`, `device_id`, `gateway_id`, `connected_at`, `closed_at` | 连接历史 |
 | `customers` | `id`, `tenant_id`, `external_ref_hash`, `profile_json` | 客户主体与受控画像 |
 | `conversations` | `id`, `customer_id`, `status`, `assigned_to`, `last_message_at` | 会话生命周期 |
@@ -21,6 +21,8 @@
 | `audit_events` | `id`, `tenant_id`, `actor`, `action`, `target`, `created_at` | 安全与管理审计 |
 
 字段名称将在实现前通过迁移文件和 API 契约最终确定。
+
+`TASK-0006` 确定首个设备库实现使用带服务端 pepper 的 HMAC-SHA-256 生成 `credential_fingerprint`。旧 APK 的 Credential 实际是设备编号，不是密码；HMAC 只降低数据库泄漏后的离线枚举风险，不代表客户端已具备强身份。详细约束见 `docs/superpowers/specs/2026-08-20-legacy-apk-multi-device-auth-design.md`。
 
 ## Redis 建议用途
 

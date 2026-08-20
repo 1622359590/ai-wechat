@@ -11,6 +11,7 @@
 - `Content` 使用 Protobuf `Any` 承载具体消息。
 - PHP 依赖 Google Protobuf，生成代码位于旧服务端的 `extend/lib/protobuf`。
 - 已发现 `TransportMessage.php`、`EnumMsgType.php`、`DeviceAuthReqMessage.php`、`FriendTalkNoticeMessage.php`、`TalkToFriendTaskMessage.php` 等生成类，以及 `GPBMetadata` 描述符。
+- 旧 PHP `DeviceAuthReqHandler` 将 `DeviceAuthReqMessage.Credential` 直接作为设备编号；它不是可以保密的客户端密钥。旧处理器忽略 `AuthType`，生成 Token 后返回 `DeviceAuthRsp=1011`。
 - 当前生成 `EnumMsgType.php` 有 225 个数字常量；`app/common/workerman/wechat` 有 138 个 PHP 文件、约 14,438 行。
 - 已恢复六个可编译的最小 Protobuf 3 文件，package 为 `Jubo.JuLiao.IM.Wx.Proto`；Go 描述符测试和旧 PHP 生成类均可往返 18 个公开安全的合成帧。
 - 合成帧使用四字节大端长度头；Go 与旧 PHP 均保留测试加入的未知字段 127。
@@ -39,7 +40,8 @@
 - 零长度是否合法，以及设备端是否存在不同版本的帧格式。
 - 最大帧长、拆包/粘包策略和慢速连接超时。
 - TLS 或应用层加密是否存在，以及证书和密钥轮换方式。
-- AccessToken 生命周期、重放防护和设备身份绑定。
+- 真实 APK 实际发送的 `AuthType` 是 `Default=0` 还是 `DeviceCode=1`。
+- 旧 APK 是否始终在后续消息中携带 AccessToken，以及真实断线重连行为。
 - 心跳间隔、断线重连、重复消息和 ack 语义。
 - 时间字段的秒/毫秒单位；原文档存在不一致。
 - 真实设备使用的 `Any.type_url` 是否与合成夹具一致，以及所有 MsgType 到消息体类型的完整映射。
