@@ -10,6 +10,7 @@ proto/testdata
 *.md
 *.log
 *.sql
+!internal/devices/postgres/migrations/*.sql
 *.dump
 *.pcap
 *.bin

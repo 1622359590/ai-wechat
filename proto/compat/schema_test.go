@@ -61,6 +61,18 @@ func TestRecoveredSchema(t *testing.T) {
 			field("AuthType", 1, protoreflect.EnumKind, protoPackage+".DeviceAuthReqMessage.EnumAuthType"),
 			field("Credential", 2, protoreflect.StringKind),
 		},
+		"DeviceAuthRspMessage": {
+			field("AccessToken", 1, protoreflect.StringKind),
+			field("Extra", 2, protoreflect.MessageKind, protoPackage+".DeviceAuthRspMessage.ExtraMessage"),
+		},
+		"DeviceAuthRspMessage.ExtraMessage": {
+			field("SupplierId", 1, protoreflect.Int64Kind),
+			field("UnionId", 2, protoreflect.Int64Kind),
+			field("AccountType", 3, protoreflect.EnumKind, protoPackage+".EnumAccountType"),
+			field("SupplierName", 4, protoreflect.StringKind),
+			field("NickName", 5, protoreflect.StringKind),
+			field("Token", 6, protoreflect.StringKind),
+		},
 		"HeartBeatMessage": {
 			field("Imei", 1, protoreflect.StringKind),
 			field("WeChatId", 2, protoreflect.StringKind),
@@ -126,8 +138,14 @@ func TestRecoveredSchema(t *testing.T) {
 		"UnknownMsg":       0,
 		"HeartBeatReq":     1001,
 		"DeviceAuthReq":    1010,
+		"DeviceAuthRsp":    1011,
 		"FriendTalkNotice": 1024,
 		"TalkToFriendTask": 1070,
+	})
+	requireEnumValues(t, files, "EnumAccountType", map[string]int32{
+		"UnknownAccountType": 0,
+		"Main":               1,
+		"SubUser":            2,
 	})
 	requireEnumValues(t, files, "EnumContentType", map[string]int32{
 		"UnknownContent": 0,

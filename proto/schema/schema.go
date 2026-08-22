@@ -15,6 +15,7 @@ import (
 var sourceFiles = []string{
 	"TransportMessage.proto",
 	"DeviceAuthReq.proto",
+	"DeviceAuthRsp.proto",
 	"HeartBeat.proto",
 	"FriendTalkNotice.proto",
 	"TalkToFriendTask.proto",

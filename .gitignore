@@ -46,6 +46,7 @@ temp/
 *.pcap
 *.pcapng
 crash-dumps/
+deploy/state/
 
 # Customer, chat and production data
 customer_data/
@@ -56,6 +57,9 @@ production_data/
 production-data/
 fixtures/private/
 sensitive_*.bin
+*.dsn
+legacy-query*.sql
+*.secret.bin
 
 # Dependencies and build output
 vendor/

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package Jubo.JuLiao.IM.Wx.Proto;
+
+import "TransportMessage.proto";
+
+message DeviceAuthRspMessage {
+  string AccessToken = 1;
+
+  message ExtraMessage {
+    int64 SupplierId = 1;
+    int64 UnionId = 2;
+    EnumAccountType AccountType = 3;
+    string SupplierName = 4;
+    string NickName = 5;
+    string Token = 6;
+  }
+
+  ExtraMessage Extra = 2;
+}

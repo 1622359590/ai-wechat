@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/1622359590/ai-wechat/internal/devices"
 	"github.com/1622359590/ai-wechat/internal/frame"
 	"github.com/1622359590/ai-wechat/internal/gateway"
 )
@@ -18,15 +19,20 @@ type MessageHandler interface {
 }
 
 type Config struct {
-	MaxBodyBytes               uint32
-	UnauthenticatedReadTimeout time.Duration
-	AuthenticatedReadTimeout   time.Duration
-	WriteTimeout               time.Duration
+	MaxBodyBytes                  uint32
+	UnauthenticatedReadTimeout    time.Duration
+	AuthenticatedReadTimeout      time.Duration
+	WriteTimeout                  time.Duration
+	MaxUnauthenticatedConnections int
+	MaxUnauthenticatedPerIP       int
+	MaxAuthenticatedConnections   int
 }
 
 type Server struct {
-	config  Config
-	handler MessageHandler
+	config            Config
+	handler           MessageHandler
+	deviceConnections *deviceConnections
+	admission         *Admission
 
 	ready       atomic.Bool
 	closing     atomic.Bool
@@ -37,10 +43,21 @@ type Server struct {
 }
 
 func New(config Config, handler MessageHandler) *Server {
+	if config.MaxUnauthenticatedConnections <= 0 {
+		config.MaxUnauthenticatedConnections = 50
+	}
+	if config.MaxUnauthenticatedPerIP <= 0 {
+		config.MaxUnauthenticatedPerIP = 5
+	}
+	if config.MaxAuthenticatedConnections <= 0 {
+		config.MaxAuthenticatedConnections = 150
+	}
 	return &Server{
-		config:      config,
-		handler:     handler,
-		connections: make(map[net.Conn]struct{}),
+		config:            config,
+		handler:           handler,
+		deviceConnections: newDeviceConnections(config.MaxAuthenticatedConnections),
+		admission:         NewAdmission(config.MaxUnauthenticatedConnections, config.MaxUnauthenticatedPerIP),
+		connections:       make(map[net.Conn]struct{}),
 	}
 }
 
@@ -67,21 +84,33 @@ func (server *Server) Serve(listener net.Listener) error {
 			}
 			return err
 		}
+		releaseUnauthenticated, err := server.admission.Acquire(remoteIP(connection.RemoteAddr()))
+		if err != nil {
+			_ = connection.Close()
+			continue
+		}
 		server.mu.Lock()
 		if server.closing.Load() {
 			server.mu.Unlock()
+			releaseUnauthenticated()
 			_ = connection.Close()
 			continue
 		}
 		server.connections[connection] = struct{}{}
 		server.wait.Add(1)
 		server.mu.Unlock()
-		go server.serveConnection(connection)
+		go server.serveConnection(connection, releaseUnauthenticated)
 	}
 }
 
-func (server *Server) serveConnection(connection net.Conn) {
+func (server *Server) serveConnection(connection net.Conn, releaseUnauthenticated func()) {
+	var registeredDeviceID devices.ID
+	var registeredGeneration uint64
 	defer func() {
+		releaseUnauthenticated()
+		if registeredDeviceID != "" {
+			server.deviceConnections.Unregister(registeredDeviceID, registeredGeneration)
+		}
 		_ = connection.Close()
 		server.mu.Lock()
 		delete(server.connections, connection)
@@ -89,7 +118,7 @@ func (server *Server) serveConnection(connection net.Conn) {
 		server.wait.Done()
 	}()
 
-	session := gateway.NewSession()
+	session := gateway.NewSession(remoteIP(connection.RemoteAddr()))
 	decoder := frame.NewDecoder(connection, server.config.MaxBodyBytes)
 	ctx := context.Background()
 	for {
@@ -117,7 +146,39 @@ func (server *Server) serveConnection(connection net.Conn) {
 		if err := frame.Write(connection, response, server.config.MaxBodyBytes); err != nil {
 			return
 		}
+		if session.Authenticated() {
+			releaseUnauthenticated()
+		}
+		if deviceID, pending := session.TakePendingActivation(); pending {
+			generation, replaced, err := server.deviceConnections.Register(deviceID, connection)
+			if err != nil {
+				return
+			}
+			registeredDeviceID = deviceID
+			registeredGeneration = generation
+			if replaced != nil {
+				_ = replaced.Close()
+			}
+		}
 	}
+}
+
+func (server *Server) DisconnectDevice(deviceID devices.ID) {
+	server.deviceConnections.CloseDevice(deviceID)
+}
+
+func remoteIP(address net.Addr) net.IP {
+	if address == nil {
+		return nil
+	}
+	if tcpAddress, ok := address.(*net.TCPAddr); ok {
+		return append(net.IP(nil), tcpAddress.IP...)
+	}
+	host, _, err := net.SplitHostPort(address.String())
+	if err != nil {
+		return nil
+	}
+	return net.ParseIP(host)
 }
 
 func (server *Server) Shutdown(ctx context.Context) error {
