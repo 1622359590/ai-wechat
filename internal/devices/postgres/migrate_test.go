@@ -46,10 +46,10 @@ func TestMigrateInstallsSchemaOnce(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if versions != 1 {
-		t.Fatalf("migration count = %d, want 1", versions)
+	if versions != 2 {
+		t.Fatalf("migration count = %d, want 2", versions)
 	}
-	for _, table := range []string{"devices", "device_admin_events"} {
+	for _, table := range []string{"devices", "device_admin_events", "admin_users", "admin_sessions", "admin_security_events"} {
 		var exists bool
 		if err := pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
 			t.Fatalf("look up table %q: %v", table, err)
@@ -86,8 +86,53 @@ func TestMigrateSerializesConcurrentCalls(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if versions != 1 {
-		t.Fatalf("migration count = %d, want 1", versions)
+	if versions != 2 {
+		t.Fatalf("migration count = %d, want 2", versions)
+	}
+}
+
+func TestMigrateInstallsAdminConstraints(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate(): %v", err)
+	}
+
+	var adminID string
+	if err := pool.QueryRow(ctx, `INSERT INTO admin_users (username, username_normalized, password_hash, status)
+		VALUES ('Admin_01', 'admin_01', 'synthetic-hash', 'active') RETURNING id::text`).Scan(&adminID); err != nil {
+		t.Fatalf("insert valid administrator: %v", err)
+	}
+	for _, statement := range []string{
+		`INSERT INTO admin_users (username, username_normalized, password_hash, status) VALUES ('Duplicate', 'admin_01', 'hash', 'active')`,
+		`INSERT INTO admin_users (username, username_normalized, password_hash, status) VALUES ('BadStatus', 'badstatus', 'hash', 'locked')`,
+		`INSERT INTO admin_users (username, username_normalized, password_hash, status, password_version) VALUES ('BadVersion', 'badversion', 'hash', 'active', 0)`,
+		`INSERT INTO admin_users (username, username_normalized, password_hash, status) VALUES ('Mixed', 'Mixed', 'hash', 'active')`,
+		`INSERT INTO admin_sessions (token_hash, csrf_hash, admin_user_id, password_version, created_at, last_used_at, expires_at) VALUES (decode('00', 'hex'), decode(repeat('11', 32), 'hex'), '` + adminID + `', 1, now(), now(), now() + interval '1 hour')`,
+		`INSERT INTO admin_security_events (admin_user_id, action, actor_type, created_at) VALUES ('` + adminID + `', 'unknown', 'local_cli', now())`,
+	} {
+		if _, err := pool.Exec(ctx, statement); err == nil {
+			t.Fatalf("invalid admin row was accepted: %s", statement)
+		}
+	}
+
+	credential := bytesWithLast(9)
+	var deviceID string
+	if err := pool.QueryRow(ctx, `INSERT INTO devices (tenant_id, credential_fingerprint, status)
+		VALUES ('00000000-0000-0000-0000-000000000001', $1, 'active') RETURNING id::text`, credential).Scan(&deviceID); err != nil {
+		t.Fatalf("insert valid device: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO device_admin_events (device_id, action, actor_type, reason_code, created_at)
+		VALUES ($1, 'disabled', 'admin_web', 'manual_disable', now())`, deviceID); err == nil {
+		t.Fatal("admin_web event without administrator ID was accepted")
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO device_admin_events (device_id, action, actor_type, admin_user_id, reason_code, created_at)
+		VALUES ($1, 'disabled', 'local_cli', $2, 'manual_disable', now())`, deviceID, adminID); err == nil {
+		t.Fatal("local_cli event with administrator ID was accepted")
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO device_admin_events (device_id, action, actor_type, admin_user_id, reason_code, created_at)
+		VALUES ($1, 'disabled', 'admin_web', $2, 'manual_disable', now())`, deviceID, adminID); err != nil {
+		t.Fatalf("valid admin_web event: %v", err)
 	}
 }
 

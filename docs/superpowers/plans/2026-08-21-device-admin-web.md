@@ -101,15 +101,15 @@ Commit only Task 1 files with message `feat(admin): add password identity primit
 - Produces `adminauth.Repository` and `adminpostgres.NewRepository(*pgxpool.Pool)`.
 - Persists account, Session, password-version and fixed security-event data.
 
-- [ ] **Step 1: Write failing migration tests**
+- [x] **Step 1: Write failing migration tests**
 
 Require `admin_users`, `admin_sessions`, and `admin_security_events`; extend `device_admin_events` with nullable `admin_user_id` and allow `actor_type='admin_web'` only when the administrator ID is present. Assert unique normalized username, 32-byte digests, status/action constraints, foreign keys, rollback, concurrency and forward-version rejection.
 
-- [ ] **Step 2: Verify schema RED**
+- [x] **Step 2: Verify schema RED**
 
 Run `./scripts/test-postgres.sh go test ./internal/devices/postgres -run TestMigrate -count=1`. Expected: FAIL because migration version 2 does not exist.
 
-- [ ] **Step 3: Add migration version 2**
+- [x] **Step 3: Add migration version 2**
 
 Create tables with these essential columns:
 
@@ -129,11 +129,11 @@ CREATE TABLE admin_users (
 
 `admin_sessions` stores token/CSRF digests, administrator ID, password version, created/last-used/expires/revoked times. `admin_security_events` permits only `account_created`, `password_changed`, and `password_reset`, with actor `local_cli` or `admin_web`.
 
-- [ ] **Step 4: Verify migration GREEN**
+- [x] **Step 4: Verify migration GREEN**
 
 Run the Step 2 command again. Expected: PASS.
 
-- [ ] **Step 5: Write failing repository tests**
+- [x] **Step 5: Write failing repository tests**
 
 Define and test:
 
@@ -143,6 +143,7 @@ type SessionRecord struct {
     PasswordHash string
     TokenHash [32]byte
     CSRFHash [32]byte
+    PasswordVersion int64
     CreatedAt time.Time
     LastUsedAt time.Time
     ExpiresAt time.Time
@@ -163,11 +164,11 @@ type Repository interface {
 
 Cover duplicate users, disabled users, expired/revoked/version-mismatched Sessions, coalesced touches, transactional password changes/resets and security events.
 
-- [ ] **Step 6: Verify repository RED, implement, then GREEN**
+- [x] **Step 6: Verify repository RED, implement, then GREEN**
 
 Run `./scripts/test-postgres.sh go test ./internal/adminauth/postgres -count=1`; observe missing implementation failure. Implement parameterized pgx queries and stable errors, then rerun with `./internal/devices/postgres`; expected PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Commit Task 2 files with message `feat(admin): add postgres accounts and sessions`.
 
