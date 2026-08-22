@@ -37,6 +37,14 @@ func New(repository devices.Repository, fingerprinter *devices.Fingerprinter, no
 }
 
 func (service *Service) Add(ctx context.Context, credential, label string, status devices.Status, expiryText string) (devices.Device, error) {
+	return service.add(ctx, credential, label, status, expiryText, nil)
+}
+
+func (service *Service) AddAs(ctx context.Context, credential, label string, status devices.Status, expiryText string, actor devices.AdminActor) (devices.Device, error) {
+	return service.add(ctx, credential, label, status, expiryText, &actor)
+}
+
+func (service *Service) add(ctx context.Context, credential, label string, status devices.Status, expiryText string, actor *devices.AdminActor) (devices.Device, error) {
 	if credential == "" || len(credential) > maximumCredentialBytes || !utf8.ValidString(credential) ||
 		utf8.RuneCountInString(label) > maximumLabelRunes || (status != devices.StatusActive && status != devices.StatusDisabled) {
 		return devices.Device{}, ErrInvalidInput
@@ -45,13 +53,19 @@ func (service *Service) Add(ctx context.Context, credential, label string, statu
 	if err != nil {
 		return devices.Device{}, err
 	}
-	device, err := service.repository.Add(ctx, devices.AddDevice{
+	input := devices.AddDevice{
 		Fingerprint:   service.fingerprinter.Sum(credential),
 		TenantID:      devices.DefaultTenantID,
 		Label:         label,
 		Status:        status,
 		AuthExpiresAt: expiresAt,
-	})
+	}
+	var device devices.Device
+	if actor == nil {
+		device, err = service.repository.Add(ctx, input)
+	} else {
+		device, err = service.repository.AddManaged(ctx, input, *actor, "manual_add", service.now())
+	}
 	if err != nil {
 		return devices.Device{}, sanitizeRepositoryError(err)
 	}
@@ -70,16 +84,43 @@ func (service *Service) Enable(ctx context.Context, id devices.ID) error {
 	return sanitizeRepositoryError(service.repository.SetStatus(ctx, id, devices.StatusActive, "manual_enable", service.now()))
 }
 
+func (service *Service) EnableAs(ctx context.Context, id devices.ID, actor devices.AdminActor) error {
+	return sanitizeRepositoryError(service.repository.SetStatusManaged(ctx, id, devices.StatusActive, actor, "manual_enable", service.now()))
+}
+
 func (service *Service) Disable(ctx context.Context, id devices.ID) error {
 	return sanitizeRepositoryError(service.repository.SetStatus(ctx, id, devices.StatusDisabled, "manual_disable", service.now()))
 }
 
+func (service *Service) DisableAs(ctx context.Context, id devices.ID, actor devices.AdminActor) error {
+	return sanitizeRepositoryError(service.repository.SetStatusManaged(ctx, id, devices.StatusDisabled, actor, "manual_disable", service.now()))
+}
+
 func (service *Service) SetExpiry(ctx context.Context, id devices.ID, expiryText string) error {
+	return service.setExpiry(ctx, id, expiryText, nil)
+}
+
+func (service *Service) SetExpiryAs(ctx context.Context, id devices.ID, expiryText string, actor devices.AdminActor) error {
+	return service.setExpiry(ctx, id, expiryText, &actor)
+}
+
+func (service *Service) setExpiry(ctx context.Context, id devices.ID, expiryText string, actor *devices.AdminActor) error {
 	expiresAt, err := parseExpiry(expiryText)
 	if err != nil {
 		return err
 	}
-	return sanitizeRepositoryError(service.repository.SetExpiry(ctx, id, expiresAt, "manual_expiry", service.now()))
+	if actor == nil {
+		return sanitizeRepositoryError(service.repository.SetExpiry(ctx, id, expiresAt, "manual_expiry", service.now()))
+	}
+	return sanitizeRepositoryError(service.repository.SetExpiryManaged(ctx, id, expiresAt, *actor, "manual_expiry", service.now()))
+}
+
+func (service *Service) ListEvents(ctx context.Context) ([]devices.AdminEvent, error) {
+	result, err := service.repository.ListAdminEvents(ctx, listLimit)
+	if err != nil {
+		return nil, sanitizeRepositoryError(err)
+	}
+	return result, nil
 }
 
 func parseExpiry(value string) (*time.Time, error) {

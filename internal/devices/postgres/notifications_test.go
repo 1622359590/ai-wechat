@@ -123,6 +123,57 @@ func TestListenAdminEventsCatchesUpAfterReconnect(t *testing.T) {
 	}
 }
 
+func TestManagedDisablePublishesAdminEvent(t *testing.T) {
+	pool := testPool(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate(): %v", err)
+	}
+	repository := NewRepository(pool)
+	created, err := repository.Add(ctx, devices.AddDevice{
+		Fingerprint: testFingerprint(54), TenantID: devices.DefaultTenantID, Status: devices.StatusActive,
+	})
+	if err != nil {
+		t.Fatalf("Add(): %v", err)
+	}
+	var adminUserID string
+	if err := pool.QueryRow(ctx, `INSERT INTO admin_users
+		(username, username_normalized, password_hash) VALUES ('Admin_Notify', 'admin_notify', 'synthetic-hash')
+		RETURNING id::text`).Scan(&adminUserID); err != nil {
+		t.Fatalf("create administrator: %v", err)
+	}
+	received := make(chan devices.ID, 1)
+	listener, err := NewAdminEventListener(ctx, testDSN(t), func(deviceID devices.ID) { received <- deviceID })
+	if err != nil {
+		t.Fatalf("NewAdminEventListener(): %v", err)
+	}
+	defer listener.Close()
+	runResult := make(chan error, 1)
+	go func() { runResult <- listener.Run(ctx) }()
+	if err := repository.SetStatusManaged(ctx, created.ID, devices.StatusDisabled,
+		devices.AdminActor{Type: "admin_web", AdminUserID: adminUserID}, "manual_disable", time.Now().UTC()); err != nil {
+		t.Fatalf("SetStatusManaged(): %v", err)
+	}
+	select {
+	case got := <-received:
+		if got != created.ID {
+			t.Fatalf("notification device ID = %q, want %q", got, created.ID)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("managed disable did not publish an administration event")
+	}
+	cancel()
+	select {
+	case err := <-runResult:
+		if err != nil {
+			t.Fatalf("Run() after cancellation: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run() did not stop")
+	}
+}
+
 func testDSN(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_POSTGRES_DSN")

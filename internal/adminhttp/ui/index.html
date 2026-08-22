@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>设备管理后台</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="eyebrow">AI WECHAT</span><h1>设备管理后台</h1></div>
+    <div id="account-actions" class="account" hidden><span id="current-user"></span><button id="logout-button" class="quiet" type="button">退出登录</button></div>
+  </header>
+  <main>
+    <section id="notice" class="notice" role="status" aria-live="polite" hidden></section>
+    <section id="login-panel" class="login-shell">
+      <form id="login-form" class="card login-card">
+        <p class="eyebrow">安全登录</p><h2>管理员登录</h2>
+        <label for="username">管理员账号</label><input id="username" name="username" autocomplete="username" required maxlength="64">
+        <label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="128">
+        <button type="submit">登录</button>
+      </form>
+    </section>
+    <div id="console" hidden>
+      <section class="summary"><div><p class="eyebrow">设备注册表</p><h2>连接授权</h2><p>只展示安全元数据，设备编号提交后不可查看。</p></div><button id="refresh-button" class="quiet" type="button">刷新数据</button></section>
+      <section class="grid">
+        <form id="device-form" class="card">
+          <h3>添加设备</h3>
+          <label for="credential">设备编号</label><input id="credential" name="credential" type="password" autocomplete="off" required maxlength="4096">
+          <label for="device-label">设备标签</label><input id="device-label" name="label" maxlength="120" placeholder="例如：销售一组">
+          <label for="device-status">初始状态</label><select id="device-status" name="status"><option value="active">启用</option><option value="disabled">停用</option></select>
+          <label for="device-expiry">到期时间</label><input id="device-expiry" name="expires_at" placeholder="never 或 RFC3339 时间" value="never" required>
+          <button type="submit">添加设备</button>
+        </form>
+        <form id="password-form" class="card">
+          <h3>修改管理员密码</h3>
+          <label for="current-password">当前密码</label><input id="current-password" type="password" autocomplete="current-password" required>
+          <label for="new-password">新密码</label><input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+          <button type="submit">修改并重新登录</button>
+        </form>
+      </section>
+      <section class="card table-card"><div class="section-title"><h3>设备列表</h3><span id="device-count" class="count"></span></div><div class="table-scroll"><table><thead><tr><th>设备 ID</th><th>标签</th><th>状态</th><th>到期时间</th><th>最近鉴权</th><th>操作</th></tr></thead><tbody id="device-list"></tbody></table></div></section>
+      <section class="card table-card"><div class="section-title"><h3>操作审计</h3><span>仅展示固定安全字段</span></div><div class="table-scroll"><table><thead><tr><th>时间</th><th>设备 ID</th><th>操作</th><th>来源</th><th>原因</th></tr></thead><tbody id="audit-list"></tbody></table></div></section>
+    </div>
+  </main>
+</body>
+</html>
