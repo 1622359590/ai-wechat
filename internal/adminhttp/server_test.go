@@ -145,6 +145,20 @@ func TestHealthAndMIMETypes(t *testing.T) {
 	}
 }
 
+func TestPageAssetsUseExplicitMIMETypes(t *testing.T) {
+	handler, _, _ := newHTTPTestHandler(t)
+	for path, wantType := range map[string]string{
+		"/":        "text/html; charset=utf-8",
+		"/app.css": "text/css; charset=utf-8",
+		"/app.js":  "text/javascript; charset=utf-8",
+	} {
+		response := performRequest(handler, "GET", path, "", nil, "")
+		if response.Code != http.StatusOK || response.Header().Get("Content-Type") != wantType {
+			t.Fatalf("asset %s = %d/%q", path, response.Code, response.Header().Get("Content-Type"))
+		}
+	}
+}
+
 func newHTTPTestHandler(t *testing.T) (http.Handler, *fakeAuthService, *fakeDeviceService) {
 	t.Helper()
 	auth := &fakeAuthService{}

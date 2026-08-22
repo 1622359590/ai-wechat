@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/1622359590/ai-wechat/internal/adminauth"
+	"github.com/1622359590/ai-wechat/internal/adminhttp/ui"
 	"github.com/1622359590/ai-wechat/internal/deviceadmin"
 	"github.com/1622359590/ai-wechat/internal/devices"
 )
@@ -51,6 +52,7 @@ type server struct {
 	devices DeviceService
 	ready   func(context.Context) error
 	now     func() time.Time
+	ui      http.Handler
 }
 
 func New(config Config) (http.Handler, error) {
@@ -63,7 +65,7 @@ func New(config Config) (http.Handler, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	service := &server{auth: config.Auth, devices: config.Devices, ready: config.Ready, now: config.Now}
+	service := &server{auth: config.Auth, devices: config.Devices, ready: config.Ready, now: config.Now, ui: ui.Handler()}
 	return securityMiddleware(config.Random, http.HandlerFunc(service.serveHTTP))
 }
 
@@ -72,12 +74,12 @@ func (service *server) serveHTTP(response http.ResponseWriter, request *http.Req
 		service.health(response, request)
 		return
 	}
-	if !strings.HasPrefix(request.URL.Path, apiPrefix) {
-		writeError(response, http.StatusNotFound, "not_found")
-		return
-	}
 	if !isSecureRequest(request) {
 		writeError(response, http.StatusBadRequest, "request_rejected")
+		return
+	}
+	if !strings.HasPrefix(request.URL.Path, apiPrefix) {
+		service.ui.ServeHTTP(response, request)
 		return
 	}
 	if request.Method != http.MethodGet && request.Method != http.MethodHead && !sameOrigin(request) {

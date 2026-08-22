@@ -355,23 +355,23 @@ Run `gofmt -w internal/adminhttp` and `go test -race ./internal/adminhttp ./inte
 - Produces dependency-free same-origin assets embedded in the Go binary.
 - Consumes only Task 5 `/api/admin/v1` routes.
 
-- [ ] **Step 1: Write failing asset and page-flow tests**
+- [x] **Step 1: Write failing asset and page-flow tests**
 
 Assert all assets exist, no CDN/remote URL or inline script/style is present, labels render through `textContent`, Credential/fingerprint never render, and controls exist for login, add, enable, disable, expiry, audit, password change and logout.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `go test ./internal/adminhttp/ui ./internal/adminhttp -run 'Test.*(Asset|Page|Flow)' -count=1`. Expected: FAIL because assets are absent.
 
-- [ ] **Step 3: Implement accessible responsive HTML/CSS**
+- [x] **Step 3: Implement accessible responsive HTML/CSS**
 
 Use semantic Chinese form labels, keyboard-visible focus, text plus color for status, confirmation for disable/expiry, no analytics, no external font/image, and no Node build chain.
 
-- [ ] **Step 4: Implement the minimal JavaScript client**
+- [x] **Step 4: Implement the minimal JavaScript client**
 
 Use same-origin `fetch`, keep CSRF only in memory, render user content with `textContent`, clear Credential/password inputs immediately after submission, return to login on 401, and show generic retry guidance on 503.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run UI and HTTP tests. Expected: PASS. Commit Task 6 files with `feat(admin): add embedded device console`.
 
