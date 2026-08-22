@@ -185,7 +185,7 @@ Commit Task 2 files with message `feat(admin): add postgres accounts and session
 - Produces `Service.Login`, `Authenticate`, `VerifyCSRF`, `Logout`, and `ChangePassword`.
 - Produces a bounded in-memory `LoginLimiter` that persists no IP or username.
 
-- [ ] **Step 1: Write failing authentication-service tests**
+- [x] **Step 1: Write failing authentication-service tests**
 
 Cover unknown-user dummy verification, wrong password, disabled user, uniform authentication errors, valid login, random tokens, digest-only persistence, absolute/idle expiry, CSRF constant-time comparison, five-minute touch coalescing, logout, password change, and Session rotation.
 
@@ -207,19 +207,19 @@ func (s *Service) Logout(context.Context, string) error
 func (s *Service) ChangePassword(context.Context, string, []byte, []byte) (LoginResult, error)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `go test ./internal/adminauth -run 'Test(Service|LoginLimiter)' -count=1`. Expected: FAIL because the service and limiter are absent.
 
-- [ ] **Step 3: Implement the login limiter**
+- [x] **Step 3: Implement the login limiter**
 
 HMAC normalized usernames with an ephemeral 32-byte process key and combine with canonical IP bytes. Permit five attempts per minute with burst three, expire entries after 30 minutes, and cap retained entries. Errors expose no keyed identifiers.
 
-- [ ] **Step 4: Implement Session service**
+- [x] **Step 4: Implement Session service**
 
 Generate 32-byte tokens with `io.ReadFull`, encode raw URL-safe base64, store SHA-256 digests, use `subtle.ConstantTimeCompare` for CSRF, clear password buffers, and collapse invalid/expired/revoked/version-mismatched Sessions to one error.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run `gofmt -w internal/adminauth` and `go test -race ./internal/adminauth -count=1`. Expected: PASS. Commit Task 3 files with `feat(admin): add secure login sessions`.
 
