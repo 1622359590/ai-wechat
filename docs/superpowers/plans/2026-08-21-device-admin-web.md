@@ -38,11 +38,11 @@
 - Produces `adminauth.ID`, `adminauth.User`, `NormalizeUsername`, `PasswordParams`, and `PasswordHasher`.
 - `PasswordHasher` exposes `Hash([]byte) (string, error)` and `Verify(string, []byte) (bool, error)`.
 
-- [ ] **Step 1: Make x/crypto a direct dependency**
+- [x] **Step 1: Make x/crypto a direct dependency**
 
 Run `go get golang.org/x/crypto@v0.37.0`. Expected: module version unchanged and `x/crypto` moves from indirect to direct.
 
-- [ ] **Step 2: Write failing username and password tests**
+- [x] **Step 2: Write failing username and password tests**
 
 Cover usernames matching `^[A-Za-z0-9._-]{3,64}$`, lowercase normalization, Unicode/space rejection, 12—128 byte passwords, random salts, valid/invalid verification, malformed encodings and parameter limits. Use:
 
@@ -56,11 +56,11 @@ var ProductionPasswordParams = PasswordParams{
 }
 ```
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run `go test ./internal/adminauth -run 'Test(NormalizeUsername|PasswordHasher)' -count=1`. Expected: FAIL because the package API is absent.
 
-- [ ] **Step 4: Implement minimal primitives**
+- [x] **Step 4: Implement minimal primitives**
 
 Define:
 
@@ -81,7 +81,7 @@ type User struct {
 
 Encode hashes as `$argon2id$v=19$m=65536,t=3,p=2$<salt>$<key>`. Copy randomness inputs, use constant-time key comparison, and return stable errors without password details.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run `gofmt -w internal/adminauth`, `go test ./internal/adminauth -count=1`, and `git diff --check`. Expected: PASS.
 
