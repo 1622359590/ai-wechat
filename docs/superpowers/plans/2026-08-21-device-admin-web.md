@@ -390,7 +390,7 @@ Run UI and HTTP tests. Expected: PASS. Commit Task 6 files with `feat(admin): ad
 - Produces `admin-web` configured by loopback address and secure files only.
 - Produces a scratch admin image containing only `admin-web` and CA certificates.
 
-- [ ] **Step 1: Write failing command/configuration tests**
+- [x] **Step 1: Write failing command/configuration tests**
 
 Cover missing/unsafe DSN and pepper files, invalid/non-loopback addresses, database unavailable, hidden password input, mismatch, duplicate user, reset, signals, graceful shutdown and generic console errors.
 
@@ -401,23 +401,23 @@ ADMIN_DEVICE_PEPPER_FILE=/run/secrets/device_pepper
 ADMIN_TRUST_HTTPS_PROXY=true
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `go test ./cmd/admin-user ./cmd/admin-web -count=1`. Expected: FAIL because both commands are absent.
 
-- [ ] **Step 3: Implement admin-user**
+- [x] **Step 3: Implement admin-user**
 
 Reuse `securefile`, `PasswordHasher`, and the PostgreSQL repository. Require a terminal for production passwords, print only stable success text plus administrator UUID, and never accept passwords in flags/environment.
 
-- [ ] **Step 4: Implement admin-web lifecycle**
+- [x] **Step 4: Implement admin-web lifecycle**
 
 Open bounded pools, construct services/handler, apply explicit HTTP timeouts, handle SIGINT/SIGTERM, and allow ten seconds for graceful shutdown. Startup logs include only the loopback address and stable mode.
 
-- [ ] **Step 5: Build and inspect isolated images**
+- [x] **Step 5: Build and inspect isolated images**
 
 `Dockerfile.admin` builds/copies only `/admin-web` and CA certificates into scratch. `Dockerfile.tools` adds `/admin-user`; the gateway Dockerfile remains unchanged. Build and inspect that admin lacks device-import/gateway and gateway lacks all admin binaries.
 
-- [ ] **Step 6: Verify GREEN and commit**
+- [x] **Step 6: Verify GREEN and commit**
 
 Run command tests and both image builds. Expected: PASS. Commit with `feat(admin): add web runtime and user tool`.
 

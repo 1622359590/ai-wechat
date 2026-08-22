@@ -8,12 +8,14 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -buildid=" -o /out/device-admin ./cmd/device-admin \
-    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -buildid=" -o /out/device-import ./cmd/device-import
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -buildid=" -o /out/device-import ./cmd/device-import \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -buildid=" -o /out/admin-user ./cmd/admin-user
 
 FROM scratch
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/device-admin /device-admin
 COPY --from=build /out/device-import /device-import
+COPY --from=build /out/admin-user /admin-user
 
 USER 65532:65532
 ENTRYPOINT ["/device-admin"]
