@@ -437,21 +437,21 @@ Run command tests and both image builds. Expected: PASS. Commit with `feat(admin
 - Produces loopback-only Compose deployment and generic HTTPS reverse-proxy example.
 - Produces end-to-end synthetic login/device lifecycle verification.
 
-- [ ] **Step 1: Extend smoke tests and verify RED**
+- [x] **Step 1: Extend smoke tests and verify RED**
 
 Assert migration v2, administrator creation, login/cookie/CSRF, add/list/disable/enable/expiry/password/logout, Session invalidation, audit, restart persistence, security headers, loopback port, non-root/read-only/cap-drop/resources and image isolation.
 
 Run `./deploy/smoke.sh`. Expected: FAIL because no admin service/image exists.
 
-- [ ] **Step 2: Add hardened Compose service**
+- [x] **Step 2: Add hardened Compose service**
 
-Add `admin-web` to `edge` and `registry`; publish `127.0.0.1:${ADMIN_HTTP_HOST_PORT:-18181}:18181`; mount registry secrets read-only; depend on migration; run UID 65532 with read-only root, all capabilities dropped, no-new-privileges, 128 MiB, 50 PIDs and 0.5 CPU.
+Add `admin-web` to `edge` and `registry`; publish `127.0.0.1:${ADMIN_HTTP_HOST_PORT:-18181}:18181`; mount registry secrets read-only; depend on migration; run UID 65532 with read-only root, all capabilities dropped, no-new-privileges, 256 MiB, 50 PIDs and 0.5 CPU. The original 128 MiB target was raised after a remote Argon2id password-change OOM was reproduced.
 
-- [ ] **Step 3: Add domain-independent proxy/deployment docs**
+- [x] **Step 3: Add domain-independent proxy/deployment docs**
 
 Require the operator to fill `server_name`, redirect HTTP to HTTPS, proxy to loopback, set `X-Forwarded-Proto https`, discard arbitrary client forwarding headers, and set conservative request/time limits. Include no real domain, certificate path, server address, credential or panel path.
 
-- [ ] **Step 4: Run complete local verification**
+- [x] **Step 4: Run complete local verification**
 
 Run:
 
@@ -466,18 +466,18 @@ git diff --check
 
 Expected: every command PASS.
 
-- [ ] **Step 5: Perform public/image safety review**
+- [x] **Step 5: Perform public/image safety review**
 
 Inspect working/staged diffs, ignored files, build contexts, image histories and binary lists. Search for real domains, server addresses, credentials, `.env`, DB files, logs, dumps, Session tokens, device values and local deployment paths. Expected: no sensitive match and no management binary in the gateway image.
 
-- [ ] **Step 6: Deploy isolated remote candidate**
+- [x] **Step 6: Deploy isolated remote candidate**
 
 Build reviewed Linux AMD64 images, compare local/server SHA-256, load without replacing the existing gateway, migrate, create a temporary synthetic administrator through hidden server-terminal input, bind admin to a new loopback port, and execute the synthetic lifecycle. Do not configure the final domain or switch `19090`.
 
-- [ ] **Step 7: Record exact results and commit**
+- [x] **Step 7: Record exact results and commit**
 
 Update TASK-0007 with sanitized commands/results, mark only proven acceptance items, update project status/changelog, inspect staged diff, and commit with `feat(deploy): stage device admin web`.
 
-- [ ] **Step 8: Handoff before public exposure**
+- [x] **Step 8: Handoff before public exposure**
 
 Provide the loopback port and generic proxy instructions. The user resolves their domain, configures HTTPS, creates the real administrator locally, adds one real device, and explicitly approves the later `19090` cutover after APK authentication succeeds.

@@ -183,7 +183,7 @@ assert_equal admin-user "$(docker inspect --format '{{.Config.User}}' "$admin_co
 assert_equal admin-readonly-root "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$admin_container")" "true"
 assert_equal admin-dropped-capabilities "$(docker inspect --format '{{json .HostConfig.CapDrop}}' "$admin_container")" '["ALL"]'
 assert_equal admin-pid-limit "$(docker inspect --format '{{.HostConfig.PidsLimit}}' "$admin_container")" "50"
-assert_equal admin-memory-limit "$(docker inspect --format '{{.HostConfig.Memory}}' "$admin_container")" "134217728"
+assert_equal admin-memory-limit "$(docker inspect --format '{{.HostConfig.Memory}}' "$admin_container")" "268435456"
 assert_equal admin-cpu-limit "$(docker inspect --format '{{.HostConfig.NanoCpus}}' "$admin_container")" "500000000"
 assert_equal admin-secrets-readonly "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/run/secrets"}}{{.RW}}{{end}}{{end}}' "$admin_container")" "false"
 assert_equal admin-loopback-publish "$(docker inspect --format '{{(index (index .HostConfig.PortBindings "18181/tcp") 0).HostIp}}' "$admin_container")" "127.0.0.1"

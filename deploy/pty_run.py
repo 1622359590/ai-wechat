@@ -10,6 +10,15 @@ import sys
 import time
 
 
+def exit_code(status: int) -> int:
+    """Decode waitpid status without requiring Python 3.9."""
+    if os.WIFEXITED(status):
+        return os.WEXITSTATUS(status)
+    if os.WIFSIGNALED(status):
+        return -os.WTERMSIG(status)
+    return 1
+
+
 def main() -> int:
     command = sys.argv[1:]
     if command[:1] == ["--"]:
@@ -57,7 +66,7 @@ def main() -> int:
             os.kill(child_pid, signal.SIGTERM)
             _, status = os.waitpid(child_pid, 0)
             return 1
-        return os.waitstatus_to_exitcode(status)
+        return exit_code(status)
     finally:
         for answer in answers:
             del answer

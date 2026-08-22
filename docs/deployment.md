@@ -1,6 +1,6 @@
 # 部署与容量基线
 
-状态：本机多设备注册表和管理后台 staging 已验证；远程仍为隔离候选，尚未切换
+状态：本机与远程隔离候选均已验证；尚未配置最终域名、创建真实管理员或切换现网
 最后更新：2026-08-22
 
 ## 当前可运行部署
@@ -9,7 +9,7 @@
 
 - TCP/健康检查：smoke 自动选择空闲的本机回环端口，避免影响现有 staging
 - 容器：非 root UID/GID `65532:65532`、只读根文件系统、删除全部 Linux capabilities、启用 `no-new-privileges`
-- 限额：1 CPU、256 MiB 内存、100 PID，默认最大消息体 1 MiB
+- 限额：网关 1 CPU、256 MiB 内存、100 PID；后台 0.5 CPU、256 MiB 内存、50 PID；默认最大消息体 1 MiB
 - 镜像：网关 scratch 运行时只包含 `gateway` 和 CA 根证书；后台 scratch 运行时只包含 `admin-web` 和 CA；本机管理/导入二进制只存在于独立 tools 镜像
 - 数据库：PostgreSQL 16 只加入内部 registry 网络，不发布主机端口；迁移成功后网关才启动
 
@@ -102,6 +102,8 @@ docker compose -f deploy/compose.yaml run --rm --entrypoint /admin-user tools \
 - 限制 16 KiB 请求体、登录频率和代理超时。
 
 可在服务器本机执行 `curl http://127.0.0.1:18181/livez` 检查存活；业务页面和 API 没有可信 HTTPS 代理标记时会拒绝。应用不绑定域名，但浏览器修改请求的 `Origin` 必须与当前 `Host` 完全一致。
+
+远程隔离候选已用合成管理员验证登录、设备完整生命周期、审计、修改密码、退出和重启持久化。128 MiB 后台内存限制在生产 Argon2id 改密流程中触发过 OOM，因此保持密码参数不变并把后台限制提高到 256 MiB。验收后的合成数据卷已销毁并重新迁移为空库；最终 HTTPS 域名、证书和真实管理员仍由运营人员配置。
 
 ## 远程 staging
 
