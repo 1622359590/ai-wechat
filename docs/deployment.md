@@ -1,7 +1,7 @@
 # 部署与容量基线
 
-状态：本机多设备注册表 staging 已验证；远程仍为旧 deny-all/单设备候选，尚未切换
-最后更新：2026-08-20
+状态：本机多设备注册表和管理后台 staging 已验证；远程仍为隔离候选，尚未切换
+最后更新：2026-08-22
 
 ## 当前可运行部署
 
@@ -10,7 +10,7 @@
 - TCP/健康检查：smoke 自动选择空闲的本机回环端口，避免影响现有 staging
 - 容器：非 root UID/GID `65532:65532`、只读根文件系统、删除全部 Linux capabilities、启用 `no-new-privileges`
 - 限额：1 CPU、256 MiB 内存、100 PID，默认最大消息体 1 MiB
-- 镜像：网关 scratch 运行时只包含 `gateway` 和 CA 根证书；管理/导入二进制只存在于独立 tools 镜像
+- 镜像：网关 scratch 运行时只包含 `gateway` 和 CA 根证书；后台 scratch 运行时只包含 `admin-web` 和 CA；本机管理/导入二进制只存在于独立 tools 镜像
 - 数据库：PostgreSQL 16 只加入内部 registry 网络，不发布主机端口；迁移成功后网关才启动
 
 本机启动或重建：
@@ -80,6 +80,28 @@ docker compose -f deploy/compose.yaml run --rm tools list \
 `device-import` 只用于一次性旧库迁移，必须同时提供 `--legacy-dsn-file`、`--database-dsn-file`、`--pepper-file`、`--query-file`，可先加 `--dry-run`。四个文件都必须是权限 `0400`/`0600` 的非符号链接普通文件；私有查询文件最大 64 KiB，且必须只返回 `credential`、`status`、`auth_expires_at` 三个别名。查询文件、旧库表字段、DSN 和真实计数不得进入仓库或日志。
 
 导入器用只读、单连接、带超时的 MySQL 事务读取并验证完整批次，随后才打开新库写事务。任一无效记录会使本批次零写入；重复指纹只计数，不修改新库中已有设备的状态、到期时间或标签。输出只有 `total/imported/duplicates/rejected/dry_run` 聚合值。迁移验证完成后，应从运行环境移除旧库 DSN 和私有查询文件。
+
+## 设备管理 Web 后台
+
+`admin-web` 是与 TCP 网关分离的 Go 服务，复用同一 PostgreSQL 设备库和 pepper。Compose 容器内监听 `:18181`，但端口只发布为宿主机 `127.0.0.1:${ADMIN_HTTP_HOST_PORT:-18181}`；不得改为 `0.0.0.0` 或直接对公网开放。`ADMIN_CONTAINER_BIND=true` 只用于容器内监听，同时使应用信任来自该受控回环入口的 HTTPS/客户地址代理头；回环端口发布和反向代理配置共同构成信任边界。
+
+首次创建管理员必须在服务器交互终端执行，密码不能放入命令行、环境变量、Compose 或聊天记录：
+
+```sh
+docker compose -f deploy/compose.yaml run --rm --entrypoint /admin-user tools \
+  create --database-dsn-file /run/secrets/device_database_dsn --username <ADMIN_USERNAME>
+```
+
+忘记密码时，将 `create` 换为 `reset-password`。重置成功后该管理员所有旧 Session 都会失效。
+
+公网访问必须先由 Nginx/宝塔终止 HTTPS，再代理到回环端口。使用 [`docs/nginx/admin-web.conf.example`](nginx/admin-web.conf.example) 时先替换所有 `<...>` 占位符；配置必须：
+
+- HTTP 自动跳转 HTTPS，证书与私钥只由服务器管理。
+- 代理到 `http://127.0.0.1:18181`，保留 `Host`，固定 `X-Forwarded-Proto https`。
+- 用 Nginx 观测到的 `$remote_addr` 重建 `X-Real-IP`，丢弃用户传入的转发地址头。
+- 限制 16 KiB 请求体、登录频率和代理超时。
+
+可在服务器本机执行 `curl http://127.0.0.1:18181/livez` 检查存活；业务页面和 API 没有可信 HTTPS 代理标记时会拒绝。应用不绑定域名，但浏览器修改请求的 `Origin` 必须与当前 `Host` 完全一致。
 
 ## 远程 staging
 

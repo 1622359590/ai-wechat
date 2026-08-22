@@ -45,6 +45,40 @@ func TestLoadConfigRequiresLoopbackAndSecureProxy(t *testing.T) {
 	}
 }
 
+func TestLoadConfigAllowsWildcardOnlyInExplicitContainerMode(t *testing.T) {
+	values := map[string]string{
+		"ADMIN_HTTP_ADDRESS":       ":18181",
+		"ADMIN_DATABASE_DSN_FILE":  "/synthetic/database",
+		"ADMIN_DEVICE_PEPPER_FILE": "/synthetic/pepper",
+		"ADMIN_TRUST_HTTPS_PROXY":  "true",
+	}
+	if _, err := loadConfig(func(key string) string { return values[key] }); err == nil {
+		t.Fatal("loadConfig() accepted wildcard bind without container mode")
+	}
+	values["ADMIN_CONTAINER_BIND"] = "true"
+	config, err := loadConfig(func(key string) string { return values[key] })
+	if err != nil || config.address != ":18181" || !config.containerBind {
+		t.Fatalf("loadConfig(container) = %#v/%v", config, err)
+	}
+}
+
+func TestHealthcheckRequiresSuccessfulLiveProbe(t *testing.T) {
+	healthy := http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) { response.WriteHeader(http.StatusOK) })
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen(): %v", err)
+	}
+	testServer := &http.Server{Handler: healthy}
+	go func() { _ = testServer.Serve(listener) }()
+	defer testServer.Close()
+	if err := runHealthcheck("http://" + listener.Addr().String() + "/livez"); err != nil {
+		t.Fatalf("runHealthcheck(healthy): %v", err)
+	}
+	if err := runHealthcheck("http://127.0.0.1:1/livez"); err == nil {
+		t.Fatal("runHealthcheck() accepted unavailable server")
+	}
+}
+
 func TestOpenProductionRuntimeRejectsUnsafeFilesAndUnavailableDatabase(t *testing.T) {
 	directory := t.TempDir()
 	unsafeDSN := filepath.Join(directory, "unsafe-dsn")

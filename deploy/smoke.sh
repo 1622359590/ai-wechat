@@ -41,7 +41,8 @@ DEVICE_PEPPER_FILE="$temporary_directory/device-pepper"
 POSTGRES_PASSWORD_FILE="$temporary_directory/postgres-password"
 GATEWAY_TCP_HOST_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
 GATEWAY_HEALTH_HOST_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
-export DEVICE_DATABASE_DSN_FILE DEVICE_PEPPER_FILE POSTGRES_PASSWORD_FILE GATEWAY_TCP_HOST_PORT GATEWAY_HEALTH_HOST_PORT
+ADMIN_HTTP_HOST_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
+export DEVICE_DATABASE_DSN_FILE DEVICE_PEPPER_FILE POSTGRES_PASSWORD_FILE GATEWAY_TCP_HOST_PORT GATEWAY_HEALTH_HOST_PORT ADMIN_HTTP_HOST_PORT
 
 compose() {
     docker compose -p "$project_name" -f "$compose_file" "$@"
@@ -57,7 +58,7 @@ assert_equal() {
     fi
 }
 
-compose build gateway tools >/dev/null
+compose build gateway tools admin-web >/dev/null
 
 if docker run --rm \
     -e GATEWAY_AUTH_MODE=device-registry \
@@ -77,12 +78,20 @@ if docker run --rm \
 fi
 
 filesystem_container="$(docker create ai-wechat-gateway:local)"
-if docker export "$filesystem_container" | tar -tf - | grep -Eq '(^|/)device-(admin|import)$'; then
+if docker export "$filesystem_container" | tar -tf - | grep -Eq '(^|/)(device-(admin|import)|admin-(user|web))$'; then
     docker rm "$filesystem_container" >/dev/null
     printf '%s\n' 'gateway image contains an administration tool' >&2
     exit 1
 fi
 docker rm "$filesystem_container" >/dev/null
+
+admin_filesystem_container="$(docker create ai-wechat-admin:local)"
+if docker export "$admin_filesystem_container" | tar -tf - | grep -Eq '(^|/)(gateway|device-(admin|import)|admin-user)$'; then
+    docker rm "$admin_filesystem_container" >/dev/null
+    printf '%s\n' 'admin image contains another service or tool' >&2
+    exit 1
+fi
+docker rm "$admin_filesystem_container" >/dev/null
 
 compose up -d --build
 
@@ -101,6 +110,21 @@ while [ "$attempt" -lt 60 ]; do
 done
 test "$health" = "healthy"
 
+attempt=0
+admin_health=""
+while [ "$attempt" -lt 60 ]; do
+    admin_container="$(compose ps -q admin-web 2>/dev/null || true)"
+    if [ -n "$admin_container" ]; then
+        admin_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$admin_container" 2>/dev/null || true)"
+    fi
+    if [ "$admin_health" = "healthy" ]; then
+        break
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+done
+test "$admin_health" = "healthy"
+
 migration_container="$(compose ps -a -q migrate)"
 test "$(docker inspect --format '{{.State.Status}}' "$migration_container")" = "exited"
 test "$(docker inspect --format '{{.State.ExitCode}}' "$migration_container")" = "0"
@@ -110,6 +134,10 @@ active_two="smoke-active-two-$(openssl rand -hex 12)"
 disabled="smoke-disabled-$(openssl rand -hex 12)"
 expired="smoke-expired-$(openssl rand -hex 12)"
 unknown="smoke-unknown-$(openssl rand -hex 12)"
+admin_username="smoke_admin_$(openssl rand -hex 6)"
+admin_password="Smoke-initial-$(openssl rand -hex 12)"
+admin_new_password="Smoke-replaced-$(openssl rand -hex 12)"
+admin_device="smoke-admin-device-$(openssl rand -hex 12)"
 
 printf '%s\n' "$active_one" | compose run --rm tools add --database-dsn-file /run/secrets/device_database_dsn --pepper-file /run/secrets/device_pepper --label smoke-active-one >/dev/null
 printf '%s\n' "$active_two" | compose run --rm tools add --database-dsn-file /run/secrets/device_database_dsn --pepper-file /run/secrets/device_pepper --label smoke-active-two >/dev/null
@@ -126,6 +154,22 @@ export SMOKE_GATEWAY_ADDRESS SMOKE_ACTIVE_ONE SMOKE_ACTIVE_TWO SMOKE_DISABLED SM
 
 (cd "$repository_directory" && go test ./deploy -run TestRegistryAuthenticationLifecycle -count=1)
 
+if ! printf '%s\n%s\n' "$admin_password" "$admin_password" | python3 "$deploy_directory/pty_run.py" -- \
+    docker compose -p "$project_name" -f "$compose_file" run --rm --entrypoint /admin-user tools \
+    create --database-dsn-file /run/secrets/device_database_dsn --username "$admin_username" >/dev/null 2>&1; then
+    printf '%s\n' 'synthetic administrator creation failed' >&2
+    exit 1
+fi
+
+SMOKE_ADMIN_ADDRESS="http://127.0.0.1:$ADMIN_HTTP_HOST_PORT"
+SMOKE_ADMIN_USERNAME="$admin_username"
+SMOKE_ADMIN_PASSWORD="$admin_password"
+SMOKE_ADMIN_NEW_PASSWORD="$admin_new_password"
+SMOKE_ADMIN_DEVICE="$admin_device"
+export SMOKE_ADMIN_ADDRESS SMOKE_ADMIN_USERNAME SMOKE_ADMIN_PASSWORD SMOKE_ADMIN_NEW_PASSWORD SMOKE_ADMIN_DEVICE
+(cd "$repository_directory" && go test ./deploy -run TestAdminWebLifecycle -count=1)
+unset admin_password SMOKE_ADMIN_PASSWORD
+
 assert_equal gateway-user "$(docker inspect --format '{{.Config.User}}' "$gateway_container")" "65532:65532"
 assert_equal readonly-root "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$gateway_container")" "true"
 assert_equal dropped-capabilities "$(docker inspect --format '{{json .HostConfig.CapDrop}}' "$gateway_container")" '["ALL"]'
@@ -135,10 +179,19 @@ assert_equal cpu-limit "$(docker inspect --format '{{.HostConfig.NanoCpus}}' "$g
 assert_equal secrets-readonly "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/run/secrets"}}{{.RW}}{{end}}{{end}}' "$gateway_container")" "false"
 assert_equal no-pairing-state "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/ai-wechat/pairing"}}{{.Destination}}{{end}}{{end}}' "$gateway_container")" ""
 
+assert_equal admin-user "$(docker inspect --format '{{.Config.User}}' "$admin_container")" "65532:65532"
+assert_equal admin-readonly-root "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$admin_container")" "true"
+assert_equal admin-dropped-capabilities "$(docker inspect --format '{{json .HostConfig.CapDrop}}' "$admin_container")" '["ALL"]'
+assert_equal admin-pid-limit "$(docker inspect --format '{{.HostConfig.PidsLimit}}' "$admin_container")" "50"
+assert_equal admin-memory-limit "$(docker inspect --format '{{.HostConfig.Memory}}' "$admin_container")" "134217728"
+assert_equal admin-cpu-limit "$(docker inspect --format '{{.HostConfig.NanoCpus}}' "$admin_container")" "500000000"
+assert_equal admin-secrets-readonly "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/run/secrets"}}{{.RW}}{{end}}{{end}}' "$admin_container")" "false"
+assert_equal admin-loopback-publish "$(docker inspect --format '{{(index (index .HostConfig.PortBindings "18181/tcp") 0).HostIp}}' "$admin_container")" "127.0.0.1"
+
 postgres_container="$(compose ps -q postgres)"
 assert_equal postgres-not-published "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$postgres_container")" "{}"
 assert_equal restart-count "$(docker inspect --format '{{.RestartCount}}' "$gateway_container")" "0"
-assert_equal persistent-services "$(compose ps --services --status running | sort | tr '\n' ' ')" "gateway postgres "
+assert_equal persistent-services "$(compose ps --services --status running | sort | tr '\n' ' ')" "admin-web gateway postgres "
 
 docker exec "$gateway_container" /gateway healthcheck
 docker exec -e GATEWAY_HEALTHCHECK_URL=http://127.0.0.1:18080/livez "$gateway_container" /gateway healthcheck
@@ -155,8 +208,21 @@ test "$health" = "healthy"
 (cd "$repository_directory" && go test ./deploy -run TestRegistryAuthenticationLifecycle -count=1)
 test "$(docker inspect --format '{{.RestartCount}}' "$gateway_container")" = "0"
 
+compose restart admin-web >/dev/null
+attempt=0
+while [ "$attempt" -lt 30 ]; do
+    admin_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$admin_container" 2>/dev/null || true)"
+    [ "$admin_health" = "healthy" ] && break
+    attempt=$((attempt + 1))
+    sleep 1
+done
+test "$admin_health" = "healthy"
+(cd "$repository_directory" && go test ./deploy -run TestAdminWebPersistsAfterRestart -count=1)
+
 unset SMOKE_ACTIVE_ONE SMOKE_ACTIVE_TWO SMOKE_DISABLED SMOKE_EXPIRED SMOKE_UNKNOWN
-printf 'registry-smoke=pass health=%s user=%s readonly=%s synthetic_devices=5\n' \
+unset SMOKE_ADMIN_ADDRESS SMOKE_ADMIN_USERNAME SMOKE_ADMIN_NEW_PASSWORD SMOKE_ADMIN_DEVICE admin_new_password admin_device admin_username
+printf 'registry-smoke=pass health=%s admin_health=%s user=%s readonly=%s synthetic_devices=6\n' \
     "$health" \
+    "$admin_health" \
     "$(docker inspect --format '{{.Config.User}}' "$gateway_container")" \
     "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$gateway_container")"

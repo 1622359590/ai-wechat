@@ -29,11 +29,22 @@ type webConfig struct {
 	databaseDSNFile string
 	pepperFile      string
 	trustHTTPSProxy bool
+	containerBind   bool
 }
 
 type runtimeOpener func(context.Context, webConfig) (http.Handler, func(), error)
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
+		address := os.Getenv("ADMIN_HEALTHCHECK_URL")
+		if address == "" {
+			address = "http://127.0.0.1:18181/livez"
+		}
+		if err := runHealthcheck(address); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := run(signalContext, os.Getenv, os.Stdout, openProductionRuntime); err != nil {
@@ -51,17 +62,43 @@ func loadConfig(getenv func(string) string) (webConfig, error) {
 		result.address = "127.0.0.1:18181"
 	}
 	host, portText, err := net.SplitHostPort(result.address)
-	address := net.ParseIP(host)
 	port, portErr := strconv.ParseUint(portText, 10, 16)
-	if err != nil || portErr != nil || port == 0 || address == nil || !address.IsLoopback() || result.databaseDSNFile == "" || result.pepperFile == "" {
+	containerBind := getenv("ADMIN_CONTAINER_BIND") == "true"
+	loopbackBind := false
+	if address := net.ParseIP(host); address != nil {
+		loopbackBind = address.IsLoopback()
+	}
+	if err != nil || portErr != nil || port == 0 || (!loopbackBind && !(host == "" && containerBind)) || result.databaseDSNFile == "" || result.pepperFile == "" {
 		return webConfig{}, errors.New("administration configuration is invalid")
 	}
-	trustProxy, err := strconv.ParseBool(getenv("ADMIN_TRUST_HTTPS_PROXY"))
-	if err != nil || !trustProxy {
+	if getenv("ADMIN_TRUST_HTTPS_PROXY") != "true" {
 		return webConfig{}, errors.New("trusted HTTPS proxy is required")
 	}
 	result.trustHTTPSProxy = true
+	result.containerBind = containerBind
 	return result, nil
+}
+
+func runHealthcheck(address string) error {
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return errors.New("healthcheck redirect rejected")
+		},
+	}
+	request, err := http.NewRequest(http.MethodGet, address, nil)
+	if err != nil {
+		return errors.New("healthcheck configuration invalid")
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return errors.New("healthcheck failed")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return errors.New("healthcheck failed")
+	}
+	return nil
 }
 
 func run(ctx context.Context, getenv func(string) string, output io.Writer, open runtimeOpener) error {
@@ -159,6 +196,7 @@ func openProductionRuntime(ctx context.Context, config webConfig) (http.Handler,
 	}
 	handler, err := adminhttp.New(adminhttp.Config{
 		Auth: authService, Devices: deviceService, Ready: pool.Ping, Random: rand.Reader,
+		TrustProxy: config.containerBind,
 	})
 	if err != nil {
 		pool.Close()

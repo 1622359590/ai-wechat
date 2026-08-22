@@ -48,14 +48,22 @@ func securityMiddleware(random io.Reader, next http.Handler) (http.Handler, erro
 }
 
 func isSecureRequest(request *http.Request) bool {
+	return isSecureRequestWithProxy(request, false)
+}
+
+func isSecureRequestWithProxy(request *http.Request, trustProxy bool) bool {
 	if request.TLS != nil {
 		return true
 	}
-	return remoteIsLoopback(request) && len(request.Header.Values("X-Forwarded-Proto")) == 1 && request.Header.Get("X-Forwarded-Proto") == "https"
+	return (trustProxy || remoteIsLoopback(request)) && len(request.Header.Values("X-Forwarded-Proto")) == 1 && request.Header.Get("X-Forwarded-Proto") == "https"
 }
 
 func clientIP(request *http.Request) (net.IP, error) {
-	if remoteIsLoopback(request) {
+	return clientIPWithProxy(request, false)
+}
+
+func clientIPWithProxy(request *http.Request, trustProxy bool) (net.IP, error) {
+	if trustProxy || remoteIsLoopback(request) {
 		values := request.Header.Values("X-Real-IP")
 		if len(values) == 1 && !strings.Contains(values[0], ",") {
 			if parsed := net.ParseIP(values[0]); parsed != nil {

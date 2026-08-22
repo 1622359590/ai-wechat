@@ -37,6 +37,28 @@ func TestSessionLoginUsesSecureCookieAndSafeResponse(t *testing.T) {
 	}
 }
 
+func TestExplicitContainerProxyTrustAcceptsForwardedMetadata(t *testing.T) {
+	auth := &fakeAuthService{}
+	handler, err := New(Config{
+		Auth: auth, Devices: &fakeDeviceService{}, Ready: func(context.Context) error { return nil },
+		Random: bytes.NewReader(bytes.Repeat([]byte{0x42}, 128)), TrustProxy: true,
+	})
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "http://admin.example.test/api/admin/v1/session", strings.NewReader(`{"username":"admin_01","password":"correct horse battery"}`))
+	request.RemoteAddr = "172.20.0.1:54321"
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "https://admin.example.test")
+	request.Header.Set("X-Forwarded-Proto", "https")
+	request.Header.Set("X-Real-IP", "192.0.2.60")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || auth.loginIP.String() != "192.0.2.60" {
+		t.Fatalf("container proxy response/IP = %d/%v", response.Code, auth.loginIP)
+	}
+}
+
 func TestProtectedRoutesRequireSessionCSRFAndActor(t *testing.T) {
 	handler, _, deviceService := newHTTPTestHandler(t)
 	unauthenticated := performRequest(handler, "GET", "/api/admin/v1/devices", "", nil, "")

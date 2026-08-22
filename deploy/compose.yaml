@@ -126,6 +126,46 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
 
+  admin-web:
+    image: ai-wechat-admin:local
+    build:
+      context: ..
+      dockerfile: Dockerfile.admin
+    restart: unless-stopped
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      ADMIN_HTTP_ADDRESS: ":18181"
+      ADMIN_DATABASE_DSN_FILE: /run/secrets/device_database_dsn
+      ADMIN_DEVICE_PEPPER_FILE: /run/secrets/device_pepper
+      ADMIN_TRUST_HTTPS_PROXY: "true"
+      ADMIN_CONTAINER_BIND: "true"
+    ports:
+      - "127.0.0.1:${ADMIN_HTTP_HOST_PORT:-18181}:18181"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - registry-secrets:/run/secrets:ro
+    networks:
+      - edge
+      - registry
+    healthcheck:
+      test: ["CMD", "/admin-web", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      start_period: 3s
+      retries: 3
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=8m
+    pids_limit: 50
+    mem_limit: 128m
+    cpus: 0.5
+
   tools:
     image: ai-wechat-tools:local
     build:

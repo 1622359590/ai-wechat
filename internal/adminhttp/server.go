@@ -40,19 +40,21 @@ type DeviceService interface {
 }
 
 type Config struct {
-	Auth    AuthService
-	Devices DeviceService
-	Ready   func(context.Context) error
-	Random  io.Reader
-	Now     func() time.Time
+	Auth       AuthService
+	Devices    DeviceService
+	Ready      func(context.Context) error
+	Random     io.Reader
+	Now        func() time.Time
+	TrustProxy bool
 }
 
 type server struct {
-	auth    AuthService
-	devices DeviceService
-	ready   func(context.Context) error
-	now     func() time.Time
-	ui      http.Handler
+	auth       AuthService
+	devices    DeviceService
+	ready      func(context.Context) error
+	now        func() time.Time
+	ui         http.Handler
+	trustProxy bool
 }
 
 func New(config Config) (http.Handler, error) {
@@ -65,7 +67,7 @@ func New(config Config) (http.Handler, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	service := &server{auth: config.Auth, devices: config.Devices, ready: config.Ready, now: config.Now, ui: ui.Handler()}
+	service := &server{auth: config.Auth, devices: config.Devices, ready: config.Ready, now: config.Now, ui: ui.Handler(), trustProxy: config.TrustProxy}
 	return securityMiddleware(config.Random, http.HandlerFunc(service.serveHTTP))
 }
 
@@ -74,7 +76,7 @@ func (service *server) serveHTTP(response http.ResponseWriter, request *http.Req
 		service.health(response, request)
 		return
 	}
-	if !isSecureRequest(request) {
+	if !isSecureRequestWithProxy(request, service.trustProxy) {
 		writeError(response, http.StatusBadRequest, "request_rejected")
 		return
 	}
@@ -134,7 +136,7 @@ func (service *server) session(response http.ResponseWriter, request *http.Reque
 			writeError(response, http.StatusBadRequest, "invalid_request")
 			return
 		}
-		ip, err := clientIP(request)
+		ip, err := clientIPWithProxy(request, service.trustProxy)
 		if err != nil {
 			writeError(response, http.StatusBadRequest, "request_rejected")
 			return
