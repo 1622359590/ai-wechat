@@ -74,6 +74,14 @@ func TestRepositorySessionLifecycle(t *testing.T) {
 	if found.User.ID != user.ID || found.User.Username != user.Username || found.User.LastLoginAt == nil || !found.User.LastLoginAt.Equal(now) || found.CSRFHash != record.CSRFHash || !found.ExpiresAt.Equal(record.ExpiresAt) {
 		t.Fatalf("FindSession() = %+v", found)
 	}
+	rotatedCSRF := digestWithLast(3)
+	if err := repository.RotateCSRF(ctx, record.TokenHash, rotatedCSRF, now.Add(31*time.Minute)); err != nil {
+		t.Fatalf("RotateCSRF(): %v", err)
+	}
+	rotated, err := repository.FindSession(ctx, record.TokenHash, now.Add(31*time.Minute))
+	if err != nil || rotated.CSRFHash != rotatedCSRF {
+		t.Fatalf("FindSession(rotated CSRF) = %+v/%v", rotated, err)
+	}
 	if _, err := repository.FindSession(ctx, record.TokenHash, now.Add(time.Hour)); !errors.Is(err, adminauth.ErrAuthenticationFailed) {
 		t.Fatalf("FindSession(idle boundary) error = %v, want ErrAuthenticationFailed", err)
 	}

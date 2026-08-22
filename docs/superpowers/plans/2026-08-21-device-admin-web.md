@@ -301,7 +301,7 @@ Run PostgreSQL tests for devices/deviceadmin/device-admin, then `go test ./... -
 - Produces `adminhttp.New(Config) (http.Handler, error)`.
 - Produces `/api/admin/v1` and `/livez`/`/readyz` routes.
 
-- [ ] **Step 1: Write failing API/security tests**
+- [x] **Step 1: Write failing API/security tests**
 
 Cover login/logout/me/password, device list/add/status/expiry, audit list, invalid Session, Session expiry, CSRF, same-origin checks, 16 KiB body limit, unknown/trailing JSON, methods, generic errors, MIME types and these headers:
 
@@ -312,15 +312,15 @@ Referrer-Policy: no-referrer
 Cache-Control: no-store
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `go test ./internal/adminhttp -count=1`. Expected: FAIL because the package is absent.
 
-- [ ] **Step 3: Implement strict middleware and JSON**
+- [x] **Step 3: Implement strict middleware and JSON**
 
 Use `http.MaxBytesReader`, `DisallowUnknownFields`, a second decode requiring EOF, random request IDs, panic recovery with generic 500, and no request-body logging. Trust `X-Forwarded-Proto=https` and the single `X-Real-IP` value only when `RemoteAddr` is loopback; exempt health probes. The proxy example overwrites both headers instead of appending client values.
 
-- [ ] **Step 4: Implement versioned routes**
+- [x] **Step 4: Implement versioned routes**
 
 Return only safe device fields:
 
@@ -336,7 +336,7 @@ type deviceView struct {
 
 Implement exactly these API routes: `POST /session`, `DELETE /session`, `GET /me`, `PUT /me/password`, `GET /devices`, `POST /devices`, `PUT /devices/{id}/status`, `PUT /devices/{id}/expiry`, and `GET /device-events`. Set Cookie `__Host-ai_wechat_admin` with `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, and no Domain. Use fixed error codes only.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run `gofmt -w internal/adminhttp` and `go test -race ./internal/adminhttp ./internal/adminauth ./internal/deviceadmin -count=1`. Expected: PASS. Commit with `feat(admin): add hardened device API`.
 

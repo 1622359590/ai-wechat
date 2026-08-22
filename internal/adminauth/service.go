@@ -138,6 +138,21 @@ func (service *Service) VerifyCSRF(ctx context.Context, sessionToken, csrfToken 
 	return nil
 }
 
+func (service *Service) RefreshCSRF(ctx context.Context, sessionToken string) (string, error) {
+	tokenHash, err := digestToken(sessionToken)
+	if err != nil {
+		return "", ErrAuthenticationFailed
+	}
+	csrfToken, csrfHash, err := service.newToken()
+	if err != nil {
+		return "", err
+	}
+	if err := service.repository.RotateCSRF(ctx, tokenHash, csrfHash, service.now().UTC()); err != nil {
+		return "", authenticationStorageError(err)
+	}
+	return csrfToken, nil
+}
+
 func (service *Service) Logout(ctx context.Context, sessionToken string) error {
 	tokenHash, err := digestToken(sessionToken)
 	if err != nil {

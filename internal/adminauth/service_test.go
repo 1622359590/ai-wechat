@@ -91,6 +91,28 @@ func TestServiceAuthenticatesCSRFAndLogout(t *testing.T) {
 	}
 }
 
+func TestServiceRefreshCSRFRotatesDigest(t *testing.T) {
+	now := time.Date(2026, 8, 22, 6, 30, 0, 0, time.UTC)
+	service, _ := newTestService(t, &now)
+	login, err := service.Login(context.Background(), "admin_01", []byte("correct horse battery"), net.ParseIP("192.0.2.25"))
+	if err != nil {
+		t.Fatalf("Login(): %v", err)
+	}
+	refreshed, err := service.RefreshCSRF(context.Background(), login.SessionToken)
+	if err != nil {
+		t.Fatalf("RefreshCSRF(): %v", err)
+	}
+	if refreshed == login.CSRFToken {
+		t.Fatal("RefreshCSRF() reused the prior token")
+	}
+	if err := service.VerifyCSRF(context.Background(), login.SessionToken, login.CSRFToken); !errors.Is(err, ErrAuthenticationFailed) {
+		t.Fatalf("VerifyCSRF(old) error = %v", err)
+	}
+	if err := service.VerifyCSRF(context.Background(), login.SessionToken, refreshed); err != nil {
+		t.Fatalf("VerifyCSRF(refreshed): %v", err)
+	}
+}
+
 func TestServiceRejectsIdleAndAbsoluteSessionExpiry(t *testing.T) {
 	for _, elapsed := range []time.Duration{time.Hour, 8 * time.Hour} {
 		t.Run(elapsed.String(), func(t *testing.T) {
@@ -234,6 +256,16 @@ func (repository *memoryRepository) TouchSession(_ context.Context, tokenHash [3
 		record.LastUsedAt = at
 		repository.sessions[tokenHash] = record
 	}
+	return nil
+}
+
+func (repository *memoryRepository) RotateCSRF(_ context.Context, tokenHash, csrfHash [32]byte, at time.Time) error {
+	record, exists := repository.sessions[tokenHash]
+	if !exists || record.RevokedAt != nil || !record.ExpiresAt.After(at) || !record.LastUsedAt.After(at.Add(-time.Hour)) {
+		return ErrAuthenticationFailed
+	}
+	record.CSRFHash = csrfHash
+	repository.sessions[tokenHash] = record
 	return nil
 }
 

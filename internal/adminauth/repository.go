@@ -31,6 +31,7 @@ type Repository interface {
 	CreateSession(context.Context, SessionRecord) error
 	FindSession(context.Context, [32]byte, time.Time) (SessionRecord, error)
 	TouchSession(context.Context, [32]byte, time.Time) error
+	RotateCSRF(context.Context, [32]byte, [32]byte, time.Time) error
 	RevokeSession(context.Context, [32]byte, time.Time) error
 	ChangePassword(context.Context, ID, int64, string, time.Time) (User, error)
 	ResetPassword(context.Context, string, string, time.Time) error

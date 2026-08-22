@@ -155,6 +155,25 @@ func (repository *Repository) TouchSession(ctx context.Context, tokenHash [32]by
 	return nil
 }
 
+func (repository *Repository) RotateCSRF(ctx context.Context, tokenHash, csrfHash [32]byte, at time.Time) error {
+	if repository == nil || repository.pool == nil || at.IsZero() {
+		return adminauth.ErrInvalidInput
+	}
+	result, err := repository.pool.Exec(ctx, `UPDATE admin_sessions s SET csrf_hash = $2
+		FROM admin_users u
+		WHERE s.token_hash = $1 AND s.admin_user_id = u.id
+		  AND s.revoked_at IS NULL AND s.expires_at > $3
+		  AND s.last_used_at > $3::timestamptz - interval '1 hour'
+		  AND s.password_version = u.password_version AND u.status = 'active'`, tokenHash[:], csrfHash[:], at)
+	if err != nil {
+		return databaseError(ctx)
+	}
+	if result.RowsAffected() != 1 {
+		return adminauth.ErrAuthenticationFailed
+	}
+	return nil
+}
+
 func (repository *Repository) RevokeSession(ctx context.Context, tokenHash [32]byte, at time.Time) error {
 	if repository == nil || repository.pool == nil {
 		return adminauth.ErrInvalidInput
