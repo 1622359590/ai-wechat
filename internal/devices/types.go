@@ -21,3 +21,18 @@ type Device struct {
 	AuthExpiresAt       *time.Time
 	LastAuthenticatedAt *time.Time
 }
+
+type AdminActor struct {
+	Type        string
+	AdminUserID string
+}
+
+type AdminEvent struct {
+	ID          int64
+	DeviceID    ID
+	Action      string
+	ActorType   string
+	AdminUserID string
+	ReasonCode  string
+	CreatedAt   time.Time
+}

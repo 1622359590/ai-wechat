@@ -68,7 +68,12 @@ func (repository *Repository) TouchAuthenticated(ctx context.Context, id devices
 }
 
 func (repository *Repository) Add(ctx context.Context, input devices.AddDevice) (devices.Device, error) {
-	if !validUUID(input.TenantID) || utf8.RuneCountInString(input.Label) > maxLabelRunes || !validStatus(input.Status) {
+	return repository.AddManaged(ctx, input, devices.AdminActor{Type: "local_cli"}, "manual_add", time.Now().UTC())
+}
+
+func (repository *Repository) AddManaged(ctx context.Context, input devices.AddDevice, actor devices.AdminActor, reason string, at time.Time) (devices.Device, error) {
+	if !validUUID(input.TenantID) || utf8.RuneCountInString(input.Label) > maxLabelRunes || !validStatus(input.Status) ||
+		!validAdminActor(actor) || reason != "manual_add" || at.IsZero() {
 		return devices.Device{}, devices.ErrInvalidInput
 	}
 	tx, err := repository.pool.Begin(ctx)
@@ -91,7 +96,7 @@ func (repository *Repository) Add(ctx context.Context, input devices.AddDevice) 
 		}
 		return devices.Device{}, databaseError(ctx, "insert device")
 	}
-	if err := insertAdminEvent(ctx, tx, device.ID, "created", "local_cli", "manual_add", time.Now()); err != nil {
+	if err := insertAdminEvent(ctx, tx, device.ID, "created", actor, reason, at); err != nil {
 		return devices.Device{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -126,7 +131,11 @@ func (repository *Repository) List(ctx context.Context, limit int) ([]devices.De
 }
 
 func (repository *Repository) SetStatus(ctx context.Context, id devices.ID, status devices.Status, reason string, at time.Time) error {
-	if !validUUID(string(id)) || !validStatus(status) {
+	return repository.SetStatusManaged(ctx, id, status, devices.AdminActor{Type: "local_cli"}, reason, at)
+}
+
+func (repository *Repository) SetStatusManaged(ctx context.Context, id devices.ID, status devices.Status, actor devices.AdminActor, reason string, at time.Time) error {
+	if !validUUID(string(id)) || !validStatus(status) || !validAdminActor(actor) || at.IsZero() {
 		return devices.ErrInvalidInput
 	}
 	action := "enabled"
@@ -138,16 +147,45 @@ func (repository *Repository) SetStatus(ctx context.Context, id devices.ID, stat
 	if reason != wantReason {
 		return devices.ErrInvalidInput
 	}
-	return repository.adminUpdate(ctx, id, action, reason, at,
+	return repository.adminUpdate(ctx, id, action, actor, reason, at,
 		"UPDATE devices SET status = $2, updated_at = $3 WHERE id = $1 RETURNING id", status)
 }
 
 func (repository *Repository) SetExpiry(ctx context.Context, id devices.ID, expiresAt *time.Time, reason string, at time.Time) error {
-	if !validUUID(string(id)) || reason != "manual_expiry" {
+	return repository.SetExpiryManaged(ctx, id, expiresAt, devices.AdminActor{Type: "local_cli"}, reason, at)
+}
+
+func (repository *Repository) SetExpiryManaged(ctx context.Context, id devices.ID, expiresAt *time.Time, actor devices.AdminActor, reason string, at time.Time) error {
+	if !validUUID(string(id)) || !validAdminActor(actor) || reason != "manual_expiry" || at.IsZero() {
 		return devices.ErrInvalidInput
 	}
-	return repository.adminUpdate(ctx, id, "expiry_changed", reason, at,
+	return repository.adminUpdate(ctx, id, "expiry_changed", actor, reason, at,
 		"UPDATE devices SET auth_expires_at = $2, updated_at = $3 WHERE id = $1 RETURNING id", expiresAt)
+}
+
+func (repository *Repository) ListAdminEvents(ctx context.Context, limit int) ([]devices.AdminEvent, error) {
+	if limit <= 0 || limit > maxListLimit {
+		return nil, devices.ErrInvalidInput
+	}
+	rows, err := repository.pool.Query(ctx, `SELECT id, device_id::text, action, actor_type,
+		COALESCE(admin_user_id::text, ''), reason_code, created_at
+		FROM device_admin_events ORDER BY created_at DESC, id DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, databaseError(ctx, "list device administration events")
+	}
+	defer rows.Close()
+	result := make([]devices.AdminEvent, 0)
+	for rows.Next() {
+		var event devices.AdminEvent
+		if err := rows.Scan(&event.ID, &event.DeviceID, &event.Action, &event.ActorType, &event.AdminUserID, &event.ReasonCode, &event.CreatedAt); err != nil {
+			return nil, databaseError(ctx, "read device administration events")
+		}
+		result = append(result, event)
+	}
+	if rows.Err() != nil {
+		return nil, databaseError(ctx, "read device administration events")
+	}
+	return result, nil
 }
 
 type ImportRecord struct {
@@ -218,7 +256,7 @@ func (repository *Repository) ImportDevices(ctx context.Context, records []Impor
 		if err != nil {
 			return summary, databaseError(ctx, "insert imported device")
 		}
-		if err := insertAdminEvent(ctx, tx, deviceID, "created", "migration", "legacy_import", at); err != nil {
+		if err := insertAdminEvent(ctx, tx, deviceID, "created", devices.AdminActor{Type: "migration"}, "legacy_import", at); err != nil {
 			return summary, err
 		}
 		summary.Imported++
@@ -238,7 +276,7 @@ func validImportRecords(records []ImportRecord) bool {
 	return true
 }
 
-func (repository *Repository) adminUpdate(ctx context.Context, id devices.ID, action, reason string, at time.Time, query string, value any) error {
+func (repository *Repository) adminUpdate(ctx context.Context, id devices.ID, action string, actor devices.AdminActor, reason string, at time.Time, query string, value any) error {
 	tx, err := repository.pool.Begin(ctx)
 	if err != nil {
 		return databaseError(ctx, "begin device update")
@@ -251,7 +289,7 @@ func (repository *Repository) adminUpdate(ctx context.Context, id devices.ID, ac
 	} else if err != nil {
 		return databaseError(ctx, "update device")
 	}
-	if err := insertAdminEvent(ctx, tx, id, action, "local_cli", reason, at); err != nil {
+	if err := insertAdminEvent(ctx, tx, id, action, actor, reason, at); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -260,10 +298,14 @@ func (repository *Repository) adminUpdate(ctx context.Context, id devices.ID, ac
 	return nil
 }
 
-func insertAdminEvent(ctx context.Context, tx pgx.Tx, id devices.ID, action, actor, reason string, at time.Time) error {
+func insertAdminEvent(ctx context.Context, tx pgx.Tx, id devices.ID, action string, actor devices.AdminActor, reason string, at time.Time) error {
 	var eventID int64
-	if err := tx.QueryRow(ctx, `INSERT INTO device_admin_events (device_id, action, actor_type, reason_code, created_at)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id`, id, action, actor, reason, at).Scan(&eventID); err != nil {
+	var adminUserID any
+	if actor.AdminUserID != "" {
+		adminUserID = actor.AdminUserID
+	}
+	if err := tx.QueryRow(ctx, `INSERT INTO device_admin_events (device_id, action, actor_type, admin_user_id, reason_code, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, id, action, actor.Type, adminUserID, reason, at).Scan(&eventID); err != nil {
 		if isConstraintViolation(err) {
 			return devices.ErrInvalidInput
 		}
@@ -274,6 +316,17 @@ func insertAdminEvent(ctx context.Context, tx pgx.Tx, id devices.ID, action, act
 		return databaseError(ctx, "publish device admin event")
 	}
 	return nil
+}
+
+func validAdminActor(actor devices.AdminActor) bool {
+	switch actor.Type {
+	case "local_cli":
+		return actor.AdminUserID == ""
+	case "admin_web":
+		return validUUID(actor.AdminUserID)
+	default:
+		return false
+	}
 }
 
 type scanner interface {

@@ -240,7 +240,7 @@ Run `gofmt -w internal/adminauth` and `go test -race ./internal/adminauth -count
 - Preserves `local_cli` behavior while allowing `admin_web` plus administrator UUID.
 - Lists safe event fields without Credential, fingerprint, Token, IP, or arbitrary reason text.
 
-- [ ] **Step 1: Write failing actor and event tests**
+- [x] **Step 1: Write failing actor and event tests**
 
 Prove Web events contain `admin_web` and the authenticated administrator UUID, CLI events remain `local_cli` with no UUID, invalid combinations fail, events order newest first, and disable notifications still disconnect devices.
 
@@ -261,11 +261,11 @@ type AdminEvent struct {
 }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run `./scripts/test-postgres.sh go test ./internal/devices/postgres ./internal/deviceadmin -run 'Test.*(Actor|Event)' -count=1`. Expected: FAIL because managed operations are absent.
 
-- [ ] **Step 3: Implement managed repository operations**
+- [x] **Step 3: Implement managed repository operations**
 
 Add:
 
@@ -278,11 +278,11 @@ ListAdminEvents(context.Context, int) ([]AdminEvent, error)
 
 Keep current methods as `local_cli` compatibility wrappers.
 
-- [ ] **Step 4: Extend deviceadmin Service**
+- [x] **Step 4: Extend deviceadmin Service**
 
 Add `AddAs`, `EnableAs`, `DisableAs`, `SetExpiryAs`, and `ListEvents`; each receives the explicit authenticated actor. Retain current CLI methods unchanged externally.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run PostgreSQL tests for devices/deviceadmin/device-admin, then `go test ./... -count=1`. Expected: PASS. Commit with `feat(admin): audit web device operations`.
 

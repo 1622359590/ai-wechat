@@ -246,12 +246,24 @@ func (repository *fakeRepository) TouchAuthenticated(_ context.Context, id devic
 func (*fakeRepository) Add(context.Context, devices.AddDevice) (devices.Device, error) {
 	return devices.Device{}, errors.New("not implemented in fake")
 }
+func (*fakeRepository) AddManaged(context.Context, devices.AddDevice, devices.AdminActor, string, time.Time) (devices.Device, error) {
+	return devices.Device{}, errors.New("not implemented in fake")
+}
 func (*fakeRepository) List(context.Context, int) ([]devices.Device, error) {
 	return nil, errors.New("not implemented in fake")
 }
 func (*fakeRepository) SetStatus(context.Context, devices.ID, devices.Status, string, time.Time) error {
 	return errors.New("not implemented in fake")
 }
+func (*fakeRepository) SetStatusManaged(context.Context, devices.ID, devices.Status, devices.AdminActor, string, time.Time) error {
+	return errors.New("not implemented in fake")
+}
 func (*fakeRepository) SetExpiry(context.Context, devices.ID, *time.Time, string, time.Time) error {
 	return errors.New("not implemented in fake")
+}
+func (*fakeRepository) SetExpiryManaged(context.Context, devices.ID, *time.Time, devices.AdminActor, string, time.Time) error {
+	return errors.New("not implemented in fake")
+}
+func (*fakeRepository) ListAdminEvents(context.Context, int) ([]devices.AdminEvent, error) {
+	return nil, errors.New("not implemented in fake")
 }

@@ -272,6 +272,67 @@ func TestRepositoryAdministrativeChangesAreAuditedAtomically(t *testing.T) {
 	}
 }
 
+func TestRepositoryManagedActorAndEventList(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate(): %v", err)
+	}
+	var adminUserID string
+	if err := pool.QueryRow(ctx, `INSERT INTO admin_users
+		(username, username_normalized, password_hash) VALUES ('Admin_Events', 'admin_events', 'synthetic-hash')
+		RETURNING id::text`).Scan(&adminUserID); err != nil {
+		t.Fatalf("create administrator: %v", err)
+	}
+	repository := NewRepository(pool)
+	actor := devices.AdminActor{Type: "admin_web", AdminUserID: adminUserID}
+	now := time.Date(2026, 8, 22, 9, 0, 0, 0, time.UTC)
+	created, err := repository.AddManaged(ctx, devices.AddDevice{
+		Fingerprint: testFingerprint(24),
+		TenantID:    devices.DefaultTenantID,
+		Label:       "managed-device",
+		Status:      devices.StatusActive,
+	}, actor, "manual_add", now)
+	if err != nil {
+		t.Fatalf("AddManaged(): %v", err)
+	}
+	if err := repository.SetStatusManaged(ctx, created.ID, devices.StatusDisabled, actor, "manual_disable", now.Add(time.Minute)); err != nil {
+		t.Fatalf("SetStatusManaged(): %v", err)
+	}
+	if err := repository.SetExpiry(ctx, created.ID, nil, "manual_expiry", now.Add(2*time.Minute)); err != nil {
+		t.Fatalf("SetExpiry(local CLI): %v", err)
+	}
+	events, err := repository.ListAdminEvents(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListAdminEvents(): %v", err)
+	}
+	if len(events) != 3 || events[0].Action != "expiry_changed" || events[1].Action != "disabled" || events[2].Action != "created" {
+		t.Fatalf("ListAdminEvents order = %#v", events)
+	}
+	if events[0].ActorType != "local_cli" || events[0].AdminUserID != "" {
+		t.Fatalf("local CLI event = %#v", events[0])
+	}
+	for _, event := range events[1:] {
+		if event.DeviceID != created.ID || event.ActorType != "admin_web" || event.AdminUserID != adminUserID {
+			t.Fatalf("managed event = %#v", event)
+		}
+	}
+	for _, invalid := range []devices.AdminActor{
+		{Type: "admin_web"},
+		{Type: "local_cli", AdminUserID: adminUserID},
+		{Type: "unexpected"},
+	} {
+		if _, err := repository.AddManaged(ctx, devices.AddDevice{
+			Fingerprint: testFingerprint(25), TenantID: devices.DefaultTenantID, Status: devices.StatusActive,
+		}, invalid, "manual_add", now); !errors.Is(err, devices.ErrInvalidInput) {
+			t.Fatalf("AddManaged(invalid actor %#v) error = %v", invalid, err)
+		}
+	}
+	if _, err := repository.ListAdminEvents(ctx, 0); !errors.Is(err, devices.ErrInvalidInput) {
+		t.Fatalf("ListAdminEvents(0) error = %v", err)
+	}
+}
+
 func TestRepositoryTouchAuthenticatedCoalescesWithinOneHour(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()

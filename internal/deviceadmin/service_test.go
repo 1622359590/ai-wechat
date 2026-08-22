@@ -79,6 +79,42 @@ func TestServiceEnableDisableAndExpiryUseFixedReasons(t *testing.T) {
 	}
 }
 
+func TestServiceManagedOperationsCarryActorAndListSafeEvents(t *testing.T) {
+	repository := &adminFakeRepository{
+		events: []devices.AdminEvent{{
+			ID:          4,
+			DeviceID:    adminDeviceID,
+			Action:      "disabled",
+			ActorType:   "admin_web",
+			AdminUserID: "00000000-0000-0000-0000-000000000081",
+			ReasonCode:  "manual_disable",
+			CreatedAt:   adminNow(),
+		}},
+	}
+	service := newAdminTestService(t, repository)
+	actor := devices.AdminActor{Type: "admin_web", AdminUserID: "00000000-0000-0000-0000-000000000081"}
+
+	if _, err := service.AddAs(context.Background(), "synthetic-managed-credential", "managed", devices.StatusActive, "never", actor); err != nil {
+		t.Fatalf("AddAs(): %v", err)
+	}
+	if repository.actor != actor || repository.reason != "manual_add" {
+		t.Fatalf("AddAs actor/reason = %#v/%q", repository.actor, repository.reason)
+	}
+	if err := service.DisableAs(context.Background(), adminDeviceID, actor); err != nil {
+		t.Fatalf("DisableAs(): %v", err)
+	}
+	if repository.actor != actor || repository.reason != "manual_disable" {
+		t.Fatalf("DisableAs actor/reason = %#v/%q", repository.actor, repository.reason)
+	}
+	events, err := service.ListEvents(context.Background())
+	if err != nil {
+		t.Fatalf("ListEvents(): %v", err)
+	}
+	if repository.eventLimit != 1000 || len(events) != 1 || events[0].AdminUserID != actor.AdminUserID {
+		t.Fatalf("ListEvents limit/result = %d/%#v", repository.eventLimit, events)
+	}
+}
+
 func TestServiceErrorsDoNotExposeCredentialOrFingerprint(t *testing.T) {
 	credential := "sensitive-synthetic-credential"
 	repository := &adminFakeRepository{addErr: errors.New("repository leaked " + credential)}
@@ -121,6 +157,9 @@ type adminFakeRepository struct {
 	expiry     *time.Time
 	reason     string
 	at         time.Time
+	actor      devices.AdminActor
+	events     []devices.AdminEvent
+	eventLimit int
 }
 
 func (repository *adminFakeRepository) Authorize(context.Context, devices.Fingerprint, time.Time) (devices.Device, error) {
@@ -136,6 +175,10 @@ func (repository *adminFakeRepository) Add(_ context.Context, input devices.AddD
 	}
 	return devices.Device{ID: adminDeviceID, TenantID: input.TenantID, Label: input.Label, Status: input.Status, AuthExpiresAt: input.AuthExpiresAt}, nil
 }
+func (repository *adminFakeRepository) AddManaged(_ context.Context, input devices.AddDevice, actor devices.AdminActor, reason string, at time.Time) (devices.Device, error) {
+	repository.actor, repository.reason, repository.at = actor, reason, at
+	return repository.Add(context.Background(), input)
+}
 func (repository *adminFakeRepository) List(_ context.Context, limit int) ([]devices.Device, error) {
 	repository.listLimit = limit
 	return repository.listResult, nil
@@ -144,7 +187,19 @@ func (repository *adminFakeRepository) SetStatus(_ context.Context, _ devices.ID
 	repository.status, repository.reason, repository.at = status, reason, at
 	return nil
 }
+func (repository *adminFakeRepository) SetStatusManaged(_ context.Context, _ devices.ID, status devices.Status, actor devices.AdminActor, reason string, at time.Time) error {
+	repository.status, repository.actor, repository.reason, repository.at = status, actor, reason, at
+	return nil
+}
 func (repository *adminFakeRepository) SetExpiry(_ context.Context, _ devices.ID, expiry *time.Time, reason string, at time.Time) error {
 	repository.expiry, repository.reason, repository.at = expiry, reason, at
 	return nil
+}
+func (repository *adminFakeRepository) SetExpiryManaged(_ context.Context, _ devices.ID, expiry *time.Time, actor devices.AdminActor, reason string, at time.Time) error {
+	repository.expiry, repository.actor, repository.reason, repository.at = expiry, actor, reason, at
+	return nil
+}
+func (repository *adminFakeRepository) ListAdminEvents(_ context.Context, limit int) ([]devices.AdminEvent, error) {
+	repository.eventLimit = limit
+	return repository.events, nil
 }
